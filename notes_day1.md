@@ -15,3 +15,10 @@ changing reps to 10 does not change anything
 volume is still 800
 give the whole command line again to get theright answer of 1000
 
+print(1, 2, 3)
+1 2 3
+print("1 + 2")
+1 + 2
+print(1 + 2)
+3
+so anything inside quotes "" is turned into a string (returned as is). Removing the "" and Python computes.
