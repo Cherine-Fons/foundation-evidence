@@ -1,5 +1,6 @@
 Day 2 is being covered on the same day as Day 1, so today's date is Mon Jul 20th. This morning we covered:
 the interpreter, values, types. This afternoon we are covering: Strings, input/output, conversions.
+EXERCISE 1  String warm-up in the interpreter 
 1. "ab" * 3 (my prediction was ab ab ab, but the output was ababab)
 2. "7" + "2" (prediction: 7 + 2, output: 72)
 3. len(""): counts the number of characters in a string . I did not know what len was so I googled. Output: 0
@@ -11,20 +12,56 @@ With strings, + joins strings and * repeats a string.
 So "7" + "2" joins into "72", while "ab" * 3 repeats "ab" three times.
 
 
+EXERCISE 2 f-strings
+Def: An f-string builds a string with live values dropped into it
+The exercise: rebuild Day 1's volume output as an f-string like f"{sets} x {reps} @ {weight_kg}kg", formatted to one decimal place. The concept to format a number to one decimal inside an f-string, you write {value:.1f} — the :.1f part means "one digit after the decimal."
 
+note on an f-string: stuff inside {} = Python looks it up or computes it; stuff outside {} = printed literally as text.
 
+My input : >>> sets=5
+>>> reps=8
+>>> weight_kg=20
+>>> volume= f"{sets} x {reps} @ {weight_kg:.1f}"
+>>> volume
+my prediction: 800 but output was :'5 x 8 @ 20.0'
 
+Conclusion: an f-string doesn't compute a total — it builds a piece of text by dropping values into a template.
+I was also wrong to place .1f inside the weight_kg since I already assigned this value myself. Therefore, the right value to format up to 1 decimal is the result (volume)
 
+Correction: 
+Put the actual computation inside a brace since anything inside {} gets computed. So {sets * reps * weight_kg} inside an f-string would drop the result 800 into my text. And {sets * reps * weight_kg:.1f} would drop in 800.0. 
 
+EXERCISE 3 Conversions, and deliberately breaking them
+1. int("12") : prediction is 12, output is 12
+2. float("12.5") : prediction is 12.5, output is 12.5
+3. str(12): prediction is 12, output was '12'
+4. int("12.5"): prediction was either 12 or error, output wss error. ( invalid literal for int() )
+5. int("twelve"): prediction is error, output is error.(  invalid literal for int() )
 
+Conclusion: The lesson: int() converts a value into a whole-number integer but it can't convert a string with a decimal point, and it definitely can't convert a word.
 
+EXERCISE 4 
+New tool: input() pauses the program and waits for the user to type something. input() always returns a string.
+In `day2_logline.py`: I need to write a script using `input()` that prints one clean formatted training-log line.
+some notes: mv ~/Desktop/"Career Plan"/day2_logline.py .
+mv means "move," then the file's current Desktop location, then . (a single dot) meaning "to here, the folder I'm currently in." The quotes around "Career Plan" are needed because the folder name has a space in it. This picks the file up from Career Plan and drops it into foundation.
 
-2. f-strings: `f"{sets} x {reps} @ {weight_kg}kg"`. Rebuild Day 1's output with an f-string, formatted to one decimal place.
-3. Conversions: `int("12")`, `float("12.5")`, `str(12)`. Deliberately trigger `int("12.5")` and `int("twelve")`; retype both tracebacks into `notes_day2.md` and annotate what each is telling you.
-4. `day2_logline.py`: a script using `input()` to ask for exercise name, sets, reps, weight; prints one clean formatted training-log line. (Yes, `input()` returns a string. That is the whole lesson.)
-5. Bug hunt — retype these by hand, run, diagnose, fix; one sentence each on the cause:
-   - `weight = input("kg? ")` then `print(weight * 2.5)`
-   - `print("total: " + 45)`
-   - `name = "farmer's carry"` typed with a straight quote inside single quotes: `name = 'farmer's carry'`
+EXERCISE 5 debug
+I was given: `weight = input("kg? ")` then `print(weight * 2.5)`
+I typed : >>> weight = input("kg?")
+kg?2
+>>> print(weight * 2.5)
+Traceback (most recent call last):
+  File "<python-input-64>", line 1, in <module>
+    print(weight * 2.5)
+          ~~~~~~~^~~~~
+TypeError: can't multiply sequence by non-int of type 'float'
 
-**Done when:** you can say precisely what type `input()` returns and what to do about it.
+correction: weight = float(input("kg?"))
+print(weight * 2.5)
+5.0
+
+I was given: print("total: " + 45)
+fix: print("total:" + str(45))
+
+I was given: `name = "farmer's carry"`
