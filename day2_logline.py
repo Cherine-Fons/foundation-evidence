@@ -1,0 +1,6 @@
+name= input("exercise name:")
+sets= int(input("sets:"))
+reps= int(input("reps:"))
+weight_kg= input("weight_kg:")
+print( f"{sets} x {reps} @ {weight_kg}")
+print(sets * reps)
