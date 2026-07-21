@@ -113,3 +113,4 @@ That causes the `TypeError`.
 The `3` appears before the error because `print(x + 1)` runs first.
 
 EXERCISE 5 hand-trace on paper
+traced session_line('bench', 4, 6, 60): bindings → volume(4,6,60) → returns 1440 → 'bench volume: 1440', matched the run
