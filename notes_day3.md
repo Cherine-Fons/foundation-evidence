@@ -56,3 +56,14 @@ def session_line(exercise, sets, reps, weight):
   session_line("squats", 5, 8, 20)  
   output: 'squats volume: 800'
 
+  EXERCISE 3
+  The job: estimate a one-rep max from a weight and the reps you did. The formula is weight × (1 + reps/30)
+
+ def epley_1rm(weight, reps):
+    return weight * (1 + reps / 30).     group by order of operations 
+>>> epley_1rm(405, 5)
+472.50000000000006
+
+(if we had done: return f"{weight * (1 + reps / 30):.1f}"  , output would have been: 472.5 )
+
+
