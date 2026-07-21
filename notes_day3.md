@@ -67,3 +67,47 @@ def session_line(exercise, sets, reps, weight):
 (if we had done: return f"{weight * (1 + reps / 30):.1f}"  , output would have been: 472.5 )
 
 
+EXERCISE 4: return vs print
+
+Return is for using a value, print is for seeing one. This is why real functions almost always return — so their output can feed into other functions (exactly like session_line calling volume earlier, which only worked because volume returned its number rather than printing it)
+
+whole lesson:
+def f(x):
+    return x + 1
+
+def g(x):
+    print(x + 1)
+
+Now run and test:    
+f(3) + 1 → 5. f(3) returned 4, handed it back, then + 1 made 5. The returned value was usable — you could keep computing with it. That's what return gives you: a value that flows onward.
+g(2) + 1 → prints 3, then TypeError. Look carefully at the order of what happened:
+
+g(2) ran and printed 3 on the screen (you see the 3 sitting there)
+then it handed back None — because print displays but returns nothing
+then Python tried None + 1 and choked: unsupported operand type(s) for +: 'NoneType' and 'int'
+
+>>> f(3) + 1
+5
+>>> g(2) + 1
+3
+Traceback (most recent call last):
+  File "<python-input-104>", line 1, in <module>
+    g(2) + 1
+    ~~~~~^~~
+TypeError: unsupported operand type(s) for +: 'NoneType' and 'int'
+>>> 
+
+Reasoning: f(x) **returns** a value:
+python
+f(3)   # returns 4
+4 + 1  # gives 5
+
+
+g(x) only **prints** a value:
+python
+g(2)   # prints 3
+But because `g()` has no `return`, Python automatically returns `None`. So Python then tries:
+python
+None + 1
+That causes the `TypeError`.
+The `3` appears before the error because `print(x + 1)` runs first.
