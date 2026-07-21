@@ -114,3 +114,89 @@ These aren't five separate gaps — they're one idea seen from five angles: **Py
 5 * 3 output 15
 type(input("type a number: ")) output is type a number:
 
+
+IMPORTANT TABLE:
+
+Here's the whole system in one place. 
+**The `+` operator:**
+- number `+` number → **adds**: `7 + 2` = `9`
+- string `+` string → **glues (concatenates)**: `"7" + "2"` = `"72"`
+- string `+` number → **ERROR** (can't glue text to a number): `"7" + 2` → TypeError
+
+**The `*` operator:**
+- number `*` number → **multiplies**: `5 * 3` = `15`
+- string `*` number → **repeats**: `"5" * 3` = `"555"`
+- string `*` string → **ERROR** (can't repeat text by text): `"5" * "3"` → TypeError
+
+
+**Layer 1 — `input()` alone.** `input()` shows a prompt, waits, and hands back **whatever the user typed, always as a string.** Even if they type digits.
+
+age = input("age: ")     # user types 30
+
+Now `age` holds `"30"` — the string, not the number. That's the one fact that never changes: **input() → string, always.**
+
+**Layer 2 — `input()` + `type()`, which proves Layer 1.** If you don't believe input gives a string, ask Python:
+
+type(input("age: "))     # user types 30 → <class 'str'>
+
+It says `str`, even though the user typed a number. That's the proof. 
+
+**Layer 3 — `input()` + conversion + f-string, the full chain. Three steps in sequence:
+
+weight = input("kg: ")        # step 1: get string, e.g. "20"
+weight = float(weight)        # step 2: convert string → number, now 20.0
+print(f"You lifted {weight} kg")   # step 3: drop the value into text
+
+Or all in one line for steps 1–2: `weight = float(input("kg: "))`.
+
+The logic of *why each step exists*:
+- **input()** gets you text (that's all it can do)
+- **int() or float()** turns that text into a number *if you need to do math on it* (int for whole numbers, float for decimals)
+- **f-string** drops the value into a sentence for display — and inside `{}`, it shows the value; you can even compute there, like `{weight * 2}`
+
+
+more questions:
+
+**A.** User types `5`. What does each line give?
+
+x = input("num: ")
+print(type(x))
+
+
+**B.** Same `x` (still the string from A). What does `print(x + x)` show?
+
+**C.** Now:
+```
+x = int(input("num: "))    # user types 5
+print(x + x)
+```
+What does `print(x + x)` show this time — and why is it different from B?
+
+**D.** What does this print? `print(f"total: {3 + 4}")`
+
+**E.** What does this print? `print(f"total: {'3 + 4'}")` (inner quotes — the trap from Q8)
+
+Answer A–E. Wherever you hesitate is the exact spot we hammer before Day 3.
+
+
+**A.** ✅ Right. `input("num: ")` shows the prompt `num:` and waits; `type(x)` gives `<class 'str'>`. And notice what you just confirmed with your own prediction: the user typed `5`, but the type is **str**. That's Q10 patched — you now expect `str`, not integer. Locked.
+
+**B.** `x + x` where `x` is `"5"` → you said `55`. Right idea, small precision: the output is the **string** `"55"` — `"5" + "5"` glues two strings → `"55"` (text), not the number 55. The digits are right; just remember it's string concatenation producing text, because that's the whole point of B-versus-C. Mark **correct, tighten to "it's a string."**
+
+**C.** ✅ Right, and your reasoning is exactly right: `int()` wrapped the input, so `x` is the *number* `5`, and `5 + 5` = `10` (actual addition). You even nailed *why* it differs from B: in B, `+` glued strings (`"55"`); in C, `+` added numbers (`10`). That B→C contrast — same `x + x`, totally different result depending on whether you converted — **is** the centerpiece of Day 2, and you just explained it cold. That's the one that matters most, and you have it.
+
+**D.** ✅ `total: 7`. Inside `{}`, Python computes `3 + 4` → `7`. Correct.
+
+**E.** The trap, and you fell in — but it's the *last* wobble, so let's kill it. You said `total: 34`. Look carefully: it's `{'3 + 4'}` — the `3 + 4` is **in quotes** inside the braces. Quotes mean "this is literal text, do NOT compute it." So Python doesn't add, doesn't glue — it just drops the characters `3 + 4` straight in. Output: **`total: 3 + 4`**. Your answer `34` assumed it concatenated `"3"` and `"4"`, but there's no `+` operation happening at all — the entire `'3 + 4'` is one frozen string, printed literally, spaces and plus sign included.
+
+The rule, one more time, because this is the single thread through every miss you've had (Q4, Q8, and now E): **quotes = frozen literal text, Python does nothing to it.** No quotes = Python evaluates it.
+**- {3 + 4} → no quotes → compute → `7`
+**- {'3 + 4'} → quotes → literal text → `3 + 4`
+
+Predict these two to seal it:
+- `f"{'5' + '5'}"` → 55
+- `f"{5 + 5}"` → 10
+
+f"{'a' + 'b'}" → ab — two frozen strings, but the + outside the quotes runs and glues them ✅
+f"{'a + b'}" → a + b — the whole thing inside one pair of quotes, frozen, printed literally ✅
+f"{2 + 2}" → 4 — no quotes, numbers, computed ✅
