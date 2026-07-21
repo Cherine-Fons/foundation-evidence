@@ -65,3 +65,6 @@ I was given: print("total: " + 45)
 fix: print("total:" + str(45))
 
 I was given: `name = "farmer's carry"`
+fix: >>> name = "farmer's carry"
+>>> name
+"farmer's carry"
