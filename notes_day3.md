@@ -17,6 +17,42 @@ a colon : at the end of that line
 EXERCISE 1 FIRST FUNCTION: kg_to_lb(kg)
 Task: Write a function that takes a weight in kg and returns pounds (kg × 2.2046). Define it in a .py file or the interpreter, then call it three times from the interpreter with three different values — like kg_to_lb(20). Calling means typing the function's name with a value in the parentheses; it hands you back the result.
 
-kg = float(input("kg: "))
+def kg_to_lb(kg):
+    return kg * 2.2046
+call it
 
+>>> def kg_to_lb(kg):
+...     return kg * 2.2046
+...     
+>>> kg_to_lb(20)
+44.092
+>>> kg_to_lb(25)
+55.115
+>>> kg_to_lb(11.5)
+25.3529
+>>> 
+
+
+EXERCISE 2 
+def volume(sets, reps, weight):
+    return sets * reps * weight
+
+
+>> def volume(sets, reps, weight):
+...     return sets * reps * weight
+...     
+>>> volume(5, 8, 20)
+800
+>>>     
+
+session_line — a function that calls volume inside itself.
+session_line(exercise, sets, reps, weight) takes four parameters — the exercise name plus the same three numbers. Its job is to return a formatted string (a training-log line), and crucially, it computes the volume part by calling volume rather than re-doing the multiplication itself.
+
+def session_line(exercise, sets, reps, weight):
+    volume(sets, reps, weight)
+    return f"{exercise} volume: {volume(sets, reps, weight)}"
+
+  then call 
+  session_line("squats", 5, 8, 20)  
+  output: 'squats volume: 800'
 
