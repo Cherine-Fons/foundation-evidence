@@ -2,7 +2,7 @@ Day 2 is being covered on the same day as Day 1, so today's date is Mon Jul 20th
 the interpreter, values, types. This afternoon we are covering: Strings, input/output, conversions.
 EXERCISE 1  String warm-up in the interpreter 
 1. "ab" * 3 (my prediction was ab ab ab, but the output was ababab)
-2. "7" + "2" (prediction: 7 + 2, output: 72)
+2. "7" + "2" (prediction: 7 + 2, output: "72")
 3. len(""): counts the number of characters in a string . I did not know what len was so I googled. Output: 0
 4. "hello"[0] : This asks Python for the character at index 0, meaning the first character of the string. Python starts counting positions from zero so my prediction on the output is h. Output was actually 'h' and not h.
 5. "hello"[-1]: This asks Python for the character at index −1, meaning the last character of the string. Negative indexing counts backward from the end. Prediction: 'l'. Output: 'o'. My mstake was thinking it still started the count from 0 in the reverse direction. 
