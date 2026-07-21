@@ -111,3 +111,5 @@ python
 None + 1
 That causes the `TypeError`.
 The `3` appears before the error because `print(x + 1)` runs first.
+
+EXERCISE 5 hand-trace on paper
