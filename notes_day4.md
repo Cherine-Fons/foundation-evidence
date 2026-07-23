@@ -93,3 +93,18 @@ Summary:
 4. if consumes a bool — it doesn't compare anything itself
 5. A skipped branch is silent, no error, no trace
 6. else is a peer of if, no condition, catches the False case
+
+
+Starting over with Day 4:
+RUN THE FOLLOWING:
+1. 3 == 3.0             True
+2. "3" == 3             False
+3. True and False       False       (can't be True AND False at the same time)
+4. not (1 < 2)          False
+5. 1 < 2 < 3            True
+6. 2 < 1 < 3            False
+
+Reasoning: 
+3 == 3.0 → True.  3 is an int, 3.0 is a float — different types — yet == says they're equal. So == compares numeric value. But "3" == 3 is False because a string and a number aren't comparable in value at all — one's text. So the rule isn't "same type required"; it's "same value, and text is never numerically equal to a number."
+
+1 < 2 < 3 → True, 2 < 1 < 3 → False.   self-explanatory
