@@ -138,5 +138,40 @@ classify_intensity(70)      prediction 'moderate'   correct
 classify_intensity(90)      prediction 'heavy'      correct
 classify_intensity(50)      prediction 'light'      correct
 
+EXERCISE 3  can_promote(current_rank, years_at_rank)
+
+comment: 
+# white → eligible for blue at 2 years at white, blue → eligible for purple at 3 years at blue, purple → eligible for brown at 3 years at purple, brown → eligible for black at 2 years at brown.
+At 2 years: white eligible for blue
+At 3 years: blue eligible for purple
+At 3 years: purple eligible for brown
+At 2 years: brown eligible for black
+Black is out of scope
+
+improved comment:
+# Belt-promotion eligibility, including boundary cases:
+# White  → Blue:   eligible when years_at_rank >= 2
+# Blue   → Purple: eligible when years_at_rank >= 3
+# Purple → Brown:  eligible when years_at_rank >= 3
+# Brown  → Black:  eligible when years_at_rank >= 2
+# Black-belt progression is outside the scope of this function
+
+def can_promote(current_rank, years_at_rank):
+    if current_rank == "white" and  years_at_rank  >= 2:
+        return True
+    elif current_rank == "blue" and  years_at_rank  >= 3:
+        return True
+    elif current_rank == "purple" and  years_at_rank  >= 3:
+        return True
+    elif current_rank == "brown" and years_at_rank >= 2:
+        return True
+    else:
+        return False
+
+prove it:
+can_promote("white", 2)     prediction: True
+can_promote("white", 1)     prediction: False
+can_promote("blue", 3)      prediction: True
+can_promote("black", 10)    prediction: False
 
 
