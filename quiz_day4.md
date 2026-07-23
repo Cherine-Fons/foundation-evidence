@@ -138,4 +138,7 @@ ANS: bare return and pass both hand back None. No difference to the caller.
 greet("Cherine") returns None. A version that fails to greet anyone also returns None. Same value. Every time, in every case, no exceptions. So the if isn't broken because of some rule about how Python treats None in a condition. It's broken one level earlier: the value being tested never varies. Success and failure are indistinguishable from the return value, because the return value carries no information about what happened. Whatever if does with None, it does identically in both cases — so the branch you take has nothing to do with whether the greeting happened.
 A test on a constant is not a test. That's the whole answer.
 
+This file is currnet now.
+
+
 
