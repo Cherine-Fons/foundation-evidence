@@ -115,6 +115,28 @@ True or False       True
 False or False      False
 not True            False
 
-EXERCISE 2:
+EXERCISE 2 classify_intensity(pct_1rm)
+
+The function takes a percentage of my one-rep max and returns "light" (below 70), "moderate" (70–85), or "heavy" (above 85). We need to specify the boundaries. We will be building our first function with a conditional inside.
+
+# boundaries closed on both ends: moderate = [70, 85]; 70 and 85 both return "moderate"
+step 1 is the header: def, name, one parameter, colon
+step 2 is the body: We need three branches, and Python's shape for that is if / elif / else. The mechanics: if takes a condition and a colon, then an indented block; elif (short for "else if") takes another condition and colon, for the case where the first was False; else takes no condition — it catches everything remaining.
+ORDER MATTERS!
+
+# boundaries closed on both ends: moderate = [70, 85]; 70 and 85 both return "moderate"
+def classify_intensity(pct_1rm):
+    if pct_1rm  >  85:
+        return "heavy"
+    elif pct_1rm  >=  70:
+        return "moderate"
+    else:
+        return "light"
+
+classify_intensity(85)      prediction 'moderate'   correct
+classify_intensity(70)      prediction 'moderate'   correct
+classify_intensity(90)      prediction 'heavy'      correct
+classify_intensity(50)      prediction 'light'      correct
+
 
 
