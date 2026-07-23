@@ -96,6 +96,7 @@ Summary:
 
 
 Starting over with Day 4:
+EXERCISE 1:
 RUN THE FOLLOWING:
 1. 3 == 3.0             True
 2. "3" == 3             False
@@ -108,3 +109,12 @@ Reasoning:
 3 == 3.0 → True.  3 is an int, 3.0 is a float — different types — yet == says they're equal. So == compares numeric value. But "3" == 3 is False because a string and a number aren't comparable in value at all — one's text. So the rule isn't "same type required"; it's "same value, and text is never numerically equal to a number."
 
 1 < 2 < 3 → True, 2 < 1 < 3 → False.   self-explanatory
+
+Also:
+True or False       True
+False or False      False
+not True            False
+
+EXERCISE 2:
+
+
