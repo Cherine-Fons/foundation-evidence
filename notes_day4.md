@@ -235,3 +235,69 @@ True
 True
 >>> 
 
+EXERCISE 5 Bug Hunt
+
+IMPORTANT: 
+= is assignment. It's a command: put this value into this name. x = 3 means "make x hold 3." It doesn't ask a question, it doesn't produce True or False — it performs an action and produces no value at all.
+
+== is comparison. It's a question: are these two equal? x == 3 produces a bool — True or False — and that bool is what if consumes.
+
+BUG 1: if x = 3:         Repair: if x == 3 :
+Based on the IMP note, if x = 3: is asking Python to consume the result of an assignment as a condition. But assignment doesn't produce a bool — it doesn't produce anything. So Python can't even make sense of the line's structure. Given that this breaks before anything runs, at the level of the line's grammar, we get a SyntaxError.
+
+BUG 2: Construct an if/elif chain where the elif can never be reached because the first condition already covers it. Then explain why.
+
+IMPORTANT NOTE: return only works INSIDE a function
+
+x = 7
+if x > 5:
+    print("big")
+elif x > 10:
+    print("bigger")
+
+PREDICTION: big
+
+x = 3
+if x > 5:
+    print("big")
+elif x > 10:
+    print("bigger")
+
+PREDICTION: nothing
+
+x = 20
+if x > 5:
+    print("big")
+elif x > 10:
+    print("bigger")
+
+    PREDICTION: big
+
+    CONCLUSION: An unreachable branch is still a bug, even if the program does not crash. Python gives no error or warning, so the code appears to run normally while silently skipping part of the logic you wrote.
+
+run to verify:
+SyntaxError: invalid syntax
+>>> 
+>>> x = 7
+>>> if x > 5:
+...     print("big")
+... elif x > 10:
+...     print("bigger")
+...     
+big
+>>> x = 3
+>>> if x > 5:
+...     print("big")
+... elif x > 10:
+...     print("bigger")
+...     
+>>> 
+>>> 
+>>> x = 20
+>>> if x > 5:
+...     print("big")
+... elif x > 10:
+...     print("bigger")
+...     
+big
+>>> 
