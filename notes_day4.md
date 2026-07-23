@@ -108,7 +108,8 @@ RUN THE FOLLOWING:
 Reasoning: 
 3 == 3.0 → True.  3 is an int, 3.0 is a float — different types — yet == says they're equal. So == compares numeric value. But "3" == 3 is False because a string and a number aren't comparable in value at all — one's text. So the rule isn't "same type required"; it's "same value, and text is never numerically equal to a number."
 
-1 < 2 < 3 → True, 2 < 1 < 3 → False.   self-explanatory
+1 < 2 < 3 → True, 2 < 1 < 3 → False.   
+REASON: Python expands chained comparisons to 1 < 2 and 2 < 3, which is unusual — most languages evaluate 1 < 2 to a boolean first and then compare that to 3, giving nonsense. It works the way a mathematician expects, and that's a Python-specific gift worth knowing we're receiving.
 
 Also:
 True or False       True
@@ -173,6 +174,35 @@ can_promote("white", 2)     prediction: True
 can_promote("white", 1)     prediction: False
 can_promote("blue", 3)      prediction: True
 can_promote("black", 10)    prediction: False
+
+>>> # Belt-promotion eligibility, including boundary cases:
+... # White  → Blue:   eligible when years_at_rank >= 2
+... # Blue   → Purple: eligible when years_at_rank >= 3
+... # Purple → Brown:  eligible when years_at_rank >= 3
+... # Brown  → Black:  eligible when years_at_rank >= 2
+... # Black-belt progression is outside the scope of this function
+... 
+... def can_promote(current_rank, years_at_rank):
+...     if current_rank == "white" and  years_at_rank  >= 2:
+...         return True
+...     elif current_rank == "blue" and  years_at_rank  >= 3:
+...         return True
+...     elif current_rank == "purple" and  years_at_rank  >= 3:
+...         return True
+...     elif current_rank == "brown" and years_at_rank >= 2:
+...         return True
+...     else:
+...         return False
+...         
+>>> can_promote("white", 2)
+True
+>>> can_promote("white", 1)
+False
+>>> can_promote("blue", 3)
+... 
+True
+>>> can_promote("black", 10)
+False
 
 EXERCISE 4 is_admissible(a, b)      IMPORTANT FOR MY FLAGSHIP
 Returns True if and only if two conditions both hold: a + b is even, and a <= b
@@ -274,6 +304,7 @@ elif x > 10:
     PREDICTION: big
 
     CONCLUSION: An unreachable branch is still a bug, even if the program does not crash. Python gives no error or warning, so the code appears to run normally while silently skipping part of the logic you wrote.
+    Python takes the first True and stops, never evaluating later branches even when they'd also be true. 
 
 run to verify:
 SyntaxError: invalid syntax
@@ -301,3 +332,37 @@ big
 ...     
 big
 >>> 
+
+BUG 3: Write a function whose if branch returns a value but whose else branch only prints (two branches, and make the asymmetry deliberate: one branch returns, the other prints).
+
+def classify_intensity(pct_1rm):
+    if pct_1rm  >  90:
+        return "heavy"
+    else:
+        print("light") 
+
+Now call it both ways, capturing the result each time:  
+
+r = classify_intensity(95)
+print(r)
+r = classify_intensity(50)
+print(r)
+
+>>> 
+>>> def classify_intensity(pct_1rm):
+...     if pct_1rm > 90:
+...         return "heavy"
+...     else:
+...         print("light")
+...         
+>>> r= classify_intensity(95)
+>>> print(r)
+heavy
+>>> r= classify_intensity(50)
+light
+>>> print(r)
+None
+>>> 
+
+CONCLUSION: 
+This function has an asymmetric return bug because the two branches do not hand back the same kind of result. When the percentage is above 90, the function returns the string `"heavy"`, so that value gets stored in `r`. But when the percentage is 90 or below, the function only prints `"light"` and does not return anything. Because of that, Python automatically returns `None`, so `r` becomes `None` instead of `"light"`. The function looks like it handles both cases, but only one branch actually returns a usable value.
