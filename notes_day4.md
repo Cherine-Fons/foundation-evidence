@@ -174,4 +174,64 @@ can_promote("white", 1)     prediction: False
 can_promote("blue", 3)      prediction: True
 can_promote("black", 10)    prediction: False
 
+EXERCISE 4 is_admissible(a, b)      IMPORTANT FOR MY FLAGSHIP
+Returns True if and only if two conditions both hold: a + b is even, and a <= b
+
+first condition:
+how to test whether a number is even? recall modulo operator
+(a + b) % 2 == 0 — compute the remainder, compare it to zero, get a bool. That's the first condition.
+
+second condition:
+Is trivial by comparison: a <= b. And the function returns True only when both hold, which is what and is for.
+
+Next is a design question. I could write this two ways:
+Way 1 — an if/else chain like the last two functions: if both conditions hold, return True, else return False.
+
+Way 2 — recognize that the conditions already produce a bool, and simply return that bool directly. No if at all. Something in the shape of return <condition> and <condition>.
+
+Note:
+Both are correct. Recall: comparisons are expressions that evaluate to values, no if required. if is optional — it's just one thing we can do with a bool. Here, the combined condition is the answer. Wrapping it in if X: return True else: return False is asking "is this True? if so, return True" — which is circular.
+
+def is_admissible(a, b):
+    return (a + b) % 2 == 0 and a <= b
+ 
+ Note no if at all, because the combined condition already is the boolean answer. 
+
+ I need to design six hand-tested pairs, at least two designed to fail each condition separately.
+ There are four distinct outcomes possible, and good tests cover all of them (Testing each failure separately):
+
+1. both conditions pass → True
+2. the parity condition fails, but a <= b holds → False
+3. a <= b fails, but parity holds → False
+4. both fail → False
+
+
+All six conditions are of the form is_admissible(a, b)
+1. is_admissible(4, 6) returns True
+2. is_admissible(7, 3) returns False
+3. is_admissible(2, 7) returns False
+4. is_admissible(5, 2) returns False
+5. is_admissible(5, 5) returns True
+6. is_admissible(0, 0) returns True
+7. is_admissible(-2, 4)returns True 
+
+Correct:
+>>> def is_admissible(a, b):
+...     return (a + b) % 2 == 0 and a <=b
+...     
+>>> is_admissible(4, 6)
+True
+>>> is_admissible(7, 3)
+False
+>>> is_admissible(2, 7)
+False
+>>> is_admissible(5, 2)
+False
+>>> is_admissible(5, 5)
+True
+>>> is_admissible(0, 0)
+True
+>>> is_admissible(-2, 4)
+True
+>>> 
 
