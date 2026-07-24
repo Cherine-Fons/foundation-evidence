@@ -55,3 +55,9 @@ def plan_next_session(last_volume, felt_difficulty):
         return last_volume * 1.0
     elif felt_difficulty == "hard":
         return last_volume * 0.90
+
+def format_set(exercise, sets, reps, weight, pct_1rm):
+    """Take an exercise, sets, reps, weight, and percentage of 1RM, and return them as a formatted workout-set string"""
+    intensity = classify_intensity(pct_1rm)
+    return f"{exercise}: {sets}×{reps} @ {weight} — {intensity}"
+
