@@ -45,3 +45,13 @@ def can_promote(current_rank, years_at_rank):
 def is_admissible(a, b):
     """Return True when a + b is even and a is less than or equal to b; otherwise, return False"""
     return (a + b) % 2 == 0 and a <= b
+
+def plan_next_session(last_volume, felt_difficulty):
+    """Adjust the next session's volume based on how the last session felt. Use "easy" to increase volume by 5%, "ok" to keep it unchanged,
+    and "hard" to reduce it by 10%"""
+    if felt_difficulty == "easy":
+        return last_volume * 1.05
+    elif felt_difficulty == "ok":
+        return last_volume * 1.0
+    elif felt_difficulty == "hard":
+        return last_volume * 0.90
