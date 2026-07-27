@@ -23,3 +23,40 @@
    9. git commit records a snapshot of the files currently staged with git add, along with a commit message, author, timestamp, and link to the previous commit.
    10. Test each failure condition separately so we know each rule is actually being enforced.
     For is_admissible(a, b), one test should fail only because a + b is odd, and another should fail only because a > b. If both conditions fail in the same test, the function may return False for one reason while the other rule is broken and goes unnoticed.
+
+    EXERCISE 3:
+     **WEEK1_NOTES.md**, three short sections in your own words: what confused me · what clicked · what I want drilled next week.
+
+What confused me: Calling one function from inside another was the part that confused me most. I had to slow down and follow how the returned value from one function gets stored and then used inside the next function.
+
+What clicked: Everything else clicked, especially the difference between print and return, how conditions and branches work, and how variables receive values from function calls.
+
+What I want drilled next week: I do not have any specific drill requests because I want to keep moving into new material. A little review built into the next lessons is enough to reinforce what I have already learned.
+
+
+WEEK-1 EXIT CHECK:
+
+TASK: New file exit_check.py
+
+Write one function:
+
+tempo_seconds(reps, seconds_per_rep)
+
+that returns the total time under tension for a set, but returns the string "invalid" if either argument is zero or negative. (Reps at some seconds-per-rep = total seconds — but a set can't have zero/negative reps or tempo.)
+
+That's it: parameters, a conditional guard, a return. Predict three calls on paper first — one valid, two that should trip the guard — then run and reconcile.
+
+
+ANSWER:
+
+tempo_seconds(8, 3)    # 24
+tempo_seconds(0, 3)    # "invalid"
+tempo_seconds(8, -2)   # "invalid"
+
+
+def tempo_seconds(reps, seconds_per_rep):
+    """Return total time under tension, or "invalid" for non-positive inputs."""
+    if reps <= 0 or seconds_per_rep <= 0:
+        return "invalid"
+
+    return reps * seconds_per_rep
