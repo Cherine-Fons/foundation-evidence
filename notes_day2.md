@@ -14,7 +14,7 @@ So "7" + "2" joins into "72", while "ab" * 3 repeats "ab" three times.
 
 EXERCISE 2 f-strings
 Def: An f-string builds a string with live values dropped into it
-The exercise: rebuild Day 1's volume output as an f-string like f"{sets} x {reps} @ {weight_kg}kg", formatted to one decimal place. The concept to format a number to one decimal inside an f-string, you write {value:.1f} — the :.1f part means "one digit after the decimal."
+The exercise: rebuild Day 1's volume output as an f-string like f"{sets} x {reps} @ {weight_kg}", formatted to one decimal place. The concept to format a number to one decimal inside an f-string, you write {value:.1f} — the :.1f part means "one digit after the decimal."
 
 note on an f-string: stuff inside {} = Python looks it up or computes it; stuff outside {} = printed literally as text.
 
@@ -35,8 +35,8 @@ EXERCISE 3 Conversions, and deliberately breaking them
 1. int("12") : prediction is 12, output is 12
 2. float("12.5") : prediction is 12.5, output is 12.5
 3. str(12): prediction is 12, output was '12'
-4. int("12.5"): prediction was either 12 or error, output wss error. ( invalid literal for int() )
-5. int("twelve"): prediction is error, output is error.(  invalid literal for int() )
+4. int("12.5"): prediction was either 12 or error, output was error. ( invalid literal for int() ) Correction: int(float("12.5")), output: 12
+5. int("twelve"): prediction is error, output is error.(  invalid literal for int() ) Correction:  none 
 
 Conclusion: The lesson: int() converts a value into a whole-number integer but it can't convert a string with a decimal point, and it definitely can't convert a word.
 
