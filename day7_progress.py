@@ -14,3 +14,17 @@ for i in range(1, len(volumes)):
     diff = abs(volumes[i] - volumes[i - 1])
     abs_diffs.append(diff)
 print(abs_diffs)
+
+volumes = [1000, 1100, 1050, 1200]
+abs_diffs = []
+pct_changes = []
+
+for i in range(1, len(volumes)):
+    diff = abs(volumes[i] - volumes[i - 1])
+    abs_diffs.append(diff)
+print(abs_diffs)
+
+for i in range(1, len(volumes)):
+    pct = (volumes[i] - volumes[i - 1]) / volumes[i - 1] * 100
+    pct_changes.append(pct)
+print(pct_changes)

@@ -188,3 +188,111 @@ correct
 Now the note. Here's the thing to notice for the copy-vs-same question: every time you slice, Python hands you a new list containing those elements. The original weights is never altered by slicing — you saw that: slicing it multiple times left weights itself intact. (Contrast .append, which did change weights.) So: a slice returns a copy. You'll test the deeper version of this on Day 10 (what happens with nested lists).
 
 Slicing makes a new list from the elements you select, so the original list stays unchanged. I could slice weights several times and still see that weights itself was intact, unlike .append(), which actually changed the original list. The main rule is: a slice gives you a copy rather than modifying the list you sliced.
+
+
+EXERCISE 4 Primer Ch 3 Simple Ex 2, gym edition: from a list of session volumes, build (with loops, not comprehensions yet) a list of day-over-day absolute differences, then a list of percentage changes. Hand-check both against a 4-element example on paper before running.
+
+The biggest step today. Goal: from a list of session volumes, build two new lists — the day-over-day absolute differences, and the percentage changes. 
+
+Before any code, the paper work the sheet demands. Take a 4-element example:
+
+volumes = [1000, 1100, 1050, 1200]
+
+"Day-over-day difference" means each value compared to the one before it. So you compare element 1 to element 0, element 2 to element 1, element 3 to element 2. The first element has nothing before it, so it produces no difference — 4 volumes give 3 differences. That off-by-one is the crux of the exercise.
+
+On paper, compute the three absolute differences by hand:
+
+element 1 − element 0 = 1100 − 1000 = 100
+element 2 − element 1 = 1050 − 1100 = 50        (absolute difference)
+element 3 − element 2 = 1200 − 1050 = 150
+
+Now the loop. This one needs a different tool than before. Last time we looped over elements (for count in sets). But here we need each element and the one before it — so we have to loop over positions (indices), so you can reach both volumes[i] and volumes[i-1].
+
+Two new pieces. First, in the editor, set up the data and an empty list to collect results:
+
+volumes = [1000, 1100, 1050, 1200]
+abs_diffs = []
+
+abs_diffs = [] is an empty list — the accumulator, same idea as total = 0 but for collecting values instead of summing them. It starts empty; the loop will .append() into it.
+
+The loop header. You need positions 1, 2, 3 — not 0, because element 0 has nothing before it. So you loop over a range that starts at 1 and runs to the end of the list:
+
+for i in range(1, len(volumes)):
+
+Unpack it: len(volumes) is 4. So range(1, 4) produces 1, 2, 3 — exactly the positions that have a predecessor. i takes each of those in turn. Starting at 1 (not 0) is what skips the first element; stopping at len (excluded) is what avoids running off the end.
+
+This is why you loop over indices here instead of elements: i lets you grab two things per pass — volumes[i] (current) and volumes[i-1] (the one before).
+
+i takes index values, not the elements themselves. range(1, len(volumes)) is range(1, 4), which produces the numbers 1, 2, 3. Those are positions.
+
+The values — 1100, 1050, 1200 — are volumes[1], volumes[2], volumes[3]. That's what you get when you look up those indices. But i itself is 1, then 2, then 3.
+
+That distinction is the whole reason this loop works: i is a position, and you use it to reach into the list at volumes[i] and volumes[i-1].
+
+
+
+Type that header (left margin, colon). Then predict: for volumes = [1000, 1100, 1050, 1200], what three values will i take? 
+
+PREDICTION: 1100, 1050, 1200
+WRONG : i takes index values, not the elements themselves. range(1, len(volumes)) is range(1, 4), which produces the numbers 1, 2, 3. Those are positions.
+
+i is 1, then 2, then 3. Three passes, one per position that has a predecessor.
+
+Now the loop body. On each pass you compute one absolute difference and append it. Two indented lines.
+
+Line — compute the difference:
+
+    diff = abs(volumes[i] - volumes[i - 1])
+
+Walk it for the first pass, i = 1: volumes[1] - volumes[0] = 1100 − 1000 = 100. abs(...) wraps it so a negative result (like pass 2's −50) comes out positive. abs() is a built-in — absolute value.
+
+Line — append into the accumulator:
+
+    abs_diffs.append(diff)
+
+Adds this pass's diff to the abs_diffs list we started empty. Same .append we used on weights.
+
+Both lines indented, inside the loop. After the loop (back at the left margin, not indented), add a print so we can see the result:
+print(abs_diffs)
+
+
+volumes = [1000, 1100, 1050, 1200]
+abs_diffs = []
+for i in range(1, len(volumes)):
+    diff = abs(volumes[i] - volumes[i - 1])
+    abs_diffs.append(diff)
+print(abs_diffs)
+
+PREDICITION: [100, 50, 150]
+CORRECT
+
+Now the second half — percentage changes. Same structure, different formula. 
+PREDICT FIRST: for volumes = [1000, 1100, 1050, 1200]:
+
+percentage change from one day to the next = (difference ÷ the previous value) × 100. 
+So for pass 1: (1100 − 1000) / 1000 × 100 = 10
+for pass 2: (1050 - 1100) / 1100 x 100 = -4.5
+or pass 3: (1200 - 1050) / 1050 x 100 = 14.28
+
+BUILD IT:
+
+volumes = [1000, 1100, 1050, 1200]
+abs_diffs = []
+pct_changes = []
+
+for i in range(1, len(volumes)):
+    diff = abs(volumes[i] - volumes[i - 1])
+    abs_diffs.append(diff)
+print(abs_diffs)
+
+for i in range(1, len(volumes)):
+    pct = (volumes[i] - volumes[i - 1]) / volumes[i - 1] * 100
+    pct_changes.append(pct)
+print(pct_changes)
+
+
+RUN:
+
+[100, 50, 150]
+[10.0, -4.545454545454546, 14.285714285714285]
+cherinefons@Mac foundation % 
