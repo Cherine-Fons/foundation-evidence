@@ -296,3 +296,165 @@ RUN:
 [100, 50, 150]
 [10.0, -4.545454545454546, 14.285714285714285]
 cherinefons@Mac foundation % 
+
+EXERCISE 5 `day7_progress.py`: script that loops over a hard-coded list of weekly volumes and prints one formatted line per week (f-strings are Week-1 property — use them).
+
+weekly = [1000, 1100, 1050, 1200]
+for i in range(len(weekly)):
+    print(f"Week {i + 1}: {weekly[i]}")
+
+Two things to hold here:
+
+range(len(weekly)) starts at 0 here — you want every week, no predecessor trick, so no range(1, ...).
+{i + 1} displays the human week number: i runs 0,1,2,3 but you print 1,2,3,4. That's the off-by-one handled deliberately.
+
+>>> weekly = [1000, 1100, 1050, 1200]
+... for i in range(len(weekly)):
+...     print(f"Week {i + 1}: {weekly[i]}")
+...     
+Week 1: 1000
+Week 2: 1100
+Week 3: 1050
+Week 4: 1200
+>>> 
+
+EXERCISE the bug hunt. Three broken snippets; retype each, run it, read the error, fix it, one sentence on the cause. This is deliberate: you make the bug so the traceback becomes familiar.
+
+6 Bug hunt — retype, run, diagnose, fix, one sentence each:
+   - a loop whose body forgets the indent
+   - `for i in range(len(xs)):` used where `for x in xs:` was all that was needed (construct both, explain when the index form is actually required)
+   - an off-by-one: printing weeks "1..n" from `range(n)`.
+
+
+Bug 1 — the forgotten indent. Type this exactly (no indent on the print):
+
+for x in [1, 2, 3]:
+print(x)
+
+prediction: Indentationerror
+Exactly right. IndentationError: expected an indented block after 'for' statement — Python requires the body of a loop to be indented, and without it there's no "inside" to the loop. Your fix (indent the print) makes it run: 1, 2, 3. 
+
+
+>>> for x in [1, 2, 3]:
+... print(x)
+... 
+  File "<python-input-12>", line 2
+    print(x)
+    ^^^^^
+IndentationError: expected an indented block after 'for' statement on line 1
+>>> for x in [1, 2, 3]:
+...     print(x)
+...     
+1
+2
+3
+>>> 
+
+Bug 2 — index loop where a plain loop was all you needed. This one doesn't crash; it's about style. First, the clumsy version — type and run:
+
+First (the index form):
+
+xs = ["a", "b", "c"]
+for i in range(len(xs)):
+    print(xs[i])
+
+
+prediction:
+a
+b
+c
+
+COMMENT: 
+Here, i takes the index values:
+
+0
+1
+2
+
+Then xs[i] uses each index to retrieve the corresponding element:
+
+xs[0]   # "a"
+xs[1]   # "b"
+xs[2]   # "c"
+
+
+Second (the plain form):
+
+for x in xs:
+    print(x)
+
+prediction:
+a
+b
+c
+
+COMMENT:
+The plain loop is more direct:
+
+for x in xs:
+    print(x)
+
+Here, x receives each element itself:
+
+x = "a"
+x = "b"
+x = "c"
+
+So when you only need each value, the plain loop is cleaner because there is no reason to create an index and then use it merely to recover the value.
+ 
+
+
+RUN:
+
+>>> xs = ["a", "b", "c"]
+... for i in range(len(xs)):
+...     print(xs[i])
+...     
+a
+b
+c
+>>> for x in xs:
+...     print(x)
+...     
+a
+b
+c
+>>> 
+
+Both print a b c
+QUESTION: a) when do you actually need the index form? Recall Exercise 4 — the diffs loop used range(1, len(volumes)) and reached volumes[i-1]. b) Could a plain for x in volumes have reached the previous element?
+
+ANSWER: a) You need an index when the position of the element matters, especially when you must use that position to reach another element. b) Not by iteself. A plain loop could reach the previous element only if you stored that previous value yourself. The index loop is convenient because i lets you directly access both volumes[i] and volumes[i - 1].
+
+Bug 3 — the off-by-one. Type and run:
+
+n = 3
+for week in range(n):
+    print("Week", week)
+
+PREDICTION:
+Week 0
+Week 1
+Week 2
+
+Correct
+
+Two ways to fix it — pick one:
+
+change what you print: print("Week", week + 1), or
+change the range: range(1, n + 1) so it produces 1, 2, 3
+
+Correction: 
+n = 3
+for week in range(n):
+
+
+RUN:
+>>> n = 3
+... for week in range(n):
+...     print("Week", week + 1)
+...     
+Week 1
+Week 2
+Week 3
+>>> 
