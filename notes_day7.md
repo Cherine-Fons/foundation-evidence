@@ -50,6 +50,40 @@ range(0, 5)
 100
 >>> 
 
+EXERCISE 2 First loops: a `for` loop that prints each element of a list of exercise names; then one that prints a running total of a list of set-counts. *[predict]* the totals line by line on paper first.
 
+The goal: given a list of exercise names, print each one on its own line.
 
+Two pieces you need. First, a list of strings: 
+exercises = ["squat", "bench", "deadlift"]
+
+Second, the for loop. The shape is:
+
+for name in exercises:
+    print(name)
+
+Here:
+
+exercises is the variable name.
+= assigns a value to that variable.
+["squat", "bench", "deadlift"] is one list containing three strings.
+The square brackets mark the boundaries of the list.
+The commas separate the items
+
+python:
+
+exercises = ["squat", "bench", "deadlift"]
+
+for name in exercises:
+    print(name)
+
+Read the loop as:
+
+For each name in the list called exercises, print that name
+name gets its value from the loop, not from me. On the first pass Python sets name = "squat", runs the body, then sets name = "bench", runs the body again, then "deadlift". I never assign name myself.
+
+PREDICTION: (remove name = since its print(name) and not print("name ="), print(name) prints only the value)
+name = squat
+name = bench
+name = deadlift
 
