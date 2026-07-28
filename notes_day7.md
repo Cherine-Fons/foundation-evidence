@@ -139,3 +139,52 @@ total = 0
 for count in sets:
     total = total + count
     print(total)
+
+EXERCISE 3 Lists as objects: build `weights = [60, 80, 100, 120]`; index `weights[0]`, `weights[-1]`; slice `weights[1:3]`; `.append()`, then re-slice. One sentence in `notes_day7.md`: does a list slice give you a copy or the same list? (Primer Ch 3 Review Q3 — you'll test this properly on Day 10.)
+This is about reaching into a list: grabbing single elements, grabbing slices, and adding to it.
+
+In interpreter at >>>:
+Type:
+weights = [60, 80, 100, 120]
+
+Now indexing — reaching in by position. The key idea: positions start at 0, not 1. So the first element is at index 0, the second at index 1, and so on. Negative indexing counts from the end: -1 is the last element, -2 second-to-last.
+
+PREDICTION:
+weights[0]      60
+weights[-1]     120
+
+CORRECT. RUN:
+>>> weights = [ 60, 80, 100, 120 ]
+>>> weights[0]
+60
+>>> weights[-1]
+120
+>>> 
+
+NEXT: weights[1:3]   
+
+A slice, not a single element. [1:3] means "from index 1 up to but not including index 3" — same stop-is-excluded rule as range. So it pulls positions 1 and 2. Predict what those two elements are (remember 0-based: position 1 is the second element), then run. Give me the prediction and output.
+
+PREDICT: [80, 100]
+RUN:
+>>> weights[1 : 3]
+[80, 100]
+>>> 
+
+CORRECT
+
+Last piece — .append(), which adds to the end of the list. This one changes the list in place. 
+Type at >>>: weights.append(140)
+then type weights on its own line:
+
+>>> weights.append(140)
+>>> weights
+[60, 80, 100, 120, 140]
+>>> 
+
+PREDICTION: running weights[1 : 3] after append gives same answer as before [80, 100]
+correct
+
+Now the note. Here's the thing to notice for the copy-vs-same question: every time you slice, Python hands you a new list containing those elements. The original weights is never altered by slicing — you saw that: slicing it multiple times left weights itself intact. (Contrast .append, which did change weights.) So: a slice returns a copy. You'll test the deeper version of this on Day 10 (what happens with nested lists).
+
+Slicing makes a new list from the elements you select, so the original list stays unchanged. I could slice weights several times and still see that weights itself was intact, unlike .append(), which actually changed the original list. The main rule is: a slice gives you a copy rather than modifying the list you sliced.
