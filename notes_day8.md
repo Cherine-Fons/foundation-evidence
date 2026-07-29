@@ -203,3 +203,55 @@ FLAG: 130 is 30 off target
 FLAG: 75 is 25 off target
 cherinefons@Mac foundation % 
 
+EXERCISE 3
+reading values until a sentinel stops you.
+
+A sentinel is a special value that means "stop here" — not real data, just a marker for the end. Here the sentinel is None. You loop through a list and process each value, but the moment you hit None, you stop — even if there's more list after it.
+
+This is where the for-vs-while judgment comes in, and the sheet wants you to choose and justify. Two honest ways to do it:
+
+a for loop that breaks when it sees None, or
+a while loop that keeps going until it hits None.
+
+Start with the for+break version since you just learned break. Into day8_loops.py, below Exercise 2:
+
+readings = [80, 85, 90, None, 100, 105]
+for r in readings:
+    if r is None:
+        break
+    print(r)
+
+Two things to notice:
+
+if r is None: — you test for None with is, not ==. (is None is the standard Python idiom; take it as the rule for now, the why comes later.)
+when break fires at the None, everything after it (100, 105) is never printed — the sentinel cuts the list off.
+
+PREDICTION:
+80
+85
+90
+
+... readings = [80, 85, 90, None, 100, 105]
+... for r in readings:
+...     if r is None:
+...         break
+...     print(r)
+...     
+80
+85
+90
+>>> 
+
+CONCLUSION: 80, 85, 90, are correct. Then None trips the break and 100, 105 never print. The sentinel cut the stream off exactly where you predicted. And you used is None correctly.
+
+Now the judgment call the exercise is really about. You just did it with for+break. It could also be written as a while loop. The sheet asks: which did you choose, and why?
+
+Here's the frame for deciding: for naturally walks a known collection start-to-finish; while is the honest choice when you're looping until some condition changes and you don't know the count in advance (like reading input from a user until they type "quit"). Here, since readings is a fixed list already sitting in front of you, for walking it (with break for the sentinel) is arguably the more natural fit — you have the collection.
+
+
+Review Q1: for-with-break vs while — which did you choose for this, and why? (There's no single right answer; the reasoning is what's graded.)
+
+Answer: I chose a for loop with break because the readings were already stored in a list, so it made sense to examine each value directly in order. When the loop reached the sentinel None, break stopped the loop immediately, preventing the later values from being processed. A while loop could also work, but it would require extra tracking, such as an index, so the for loop was simpler and clearer here.
+
+
+
