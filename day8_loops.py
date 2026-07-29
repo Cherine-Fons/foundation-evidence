@@ -17,3 +17,16 @@ for r in readings:
 exercises = ["squat", "bench", "deadlift"]
 for i, name in enumerate(exercises):
     print(i, name)            
+
+
+names = ["squat", "bench", "deadlift"]
+weights = [100, 80, 120]
+for name, w in zip(names, weights):
+    print(f"{name}: {w}kg")
+
+
+names = ["squat", "bench", "deadlift", "row"]
+weights = [100, 80]
+for name, w in zip(names, weights):
+    print(f"{name}: {w}kg")
+    

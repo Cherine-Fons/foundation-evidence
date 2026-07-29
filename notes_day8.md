@@ -293,3 +293,56 @@ The thing to lock: enumerate yields a (index, value) pair each pass — that's w
 
 Question: What does enumerate give you on each pass, and why does for i, name need two variables?
 Answer: Enumerate gives you both the index and the item on each pass, so for i, name needs two variables to receive those two values separately.
+
+EXERCISE 5
+zip — walking two lists in parallel, pairing them up position by position.
+
+enumerate paired an index with a value. zip pairs elements from two lists — first-with-first, second-with-second, and so on. Predict first:
+
+names = ["squat", "bench", "deadlift"]
+weights = [100, 80, 120]
+for name, w in zip(names, weights):
+    print(f"{name}: {w}kg")
+
+The mechanic: zip(names, weights) yields a pair each pass — one element from each list, matched by position. for name, w unpacks that pair (same two-variable unpacking as enumerate). Pass 1: name="squat", w=100.
+
+PREDICTION:
+squat 100kg
+bench 80kg
+deadlift 120kg
+
+After run:
+>>> names = ["squat", "bench", "deadlift"]
+... weights = [100, 80, 120]
+... for name, w in zip(names, weights):
+...     print(f"{name}: {w}kg")
+...     
+squat: 100kg
+bench: 80kg
+deadlift: 120kg
+>>> 
+
+now try:
+names = ["squat", "bench", "deadlift", "row"]
+weights = [100, 80]
+for name, w in zip(names, weights):
+    print(f"{name}: {w}kg")
+
+Prediction:
+squat: 100kg
+bench: 80kg
+
+run:
+
+>>> names = ["squat", "bench", "deadlift", "row"]
+... weights = [100, 80]
+... for name, w in zip(names, weights):
+...     print(f"{name}: {w}kg")
+...     
+squat: 100kg
+bench: 80kg
+>>> 
+
+Here's the lesson — only two lines. zip stops at the shorter list. It paired squat/100 and bench/80, then ran out of weights and quit — "deadlift" and "row" are silently dropped. No error, no warning; the extra names just vanish.
+
+That's the behavior to know, not guess: zip truncates to the shortest input. The danger is the silence — if your two lists are supposed to be the same length and aren't, zip won't tell you; it'll just quietly process fewer items. That's a bug-hiding trap, same family as the zip-drops and vols[-1]-wraparound cases you've been meeting.
