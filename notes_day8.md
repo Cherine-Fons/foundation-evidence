@@ -254,4 +254,42 @@ Review Q1: for-with-break vs while — which did you choose for this, and why? (
 Answer: I chose a for loop with break because the readings were already stored in a list, so it made sense to examine each value directly in order. When the loop reached the sentinel None, break stopped the loop immediately, preventing the later values from being processed. A while loop could also work, but it would require extra tracking, such as an index, so the for loop was simpler and clearer here.
 
 
+EXERCISE 4
+enumerate — when you need both the position and the value at once.
 
+Yesterday, to get an index you used for i in range(len(xs)) and then looked up xs[i]. That works, but it's clumsy when you want both. enumerate hands you both directly, as a pair, each pass.
+
+predict first:
+
+exercises = ["squat", "bench", "deadlift"]
+for i, name in enumerate(exercises):
+    print(i, name)
+
+The key mechanic: enumerate yields a pair each pass — the index and the value. for i, name in ... unpacks that pair into two variables at once: i gets the index, name gets the value. So pass 1 gives i=0, name="squat", and so on.
+
+Predict exactly what prints (remember enumerate starts counting at 0), then run. 
+
+PREDICTION:
+0 squat
+1 bench
+2 deadlift
+
+Correct.
+
+Now the second half: enumerate can start counting from a different number. Humans often want 1-based labels. Predict, then run:
+
+for i, name in enumerate(exercises, start=1):
+    print(i, name)
+
+start=1 tells enumerate to begin the count at 1 instead of 0. This is a cleaner fix for the off-by-one than the i + 1 trick you used yesterday — the counter itself starts where you want. Predict the three lines.
+
+PREDICTION:
+1 squat
+2 bench
+3 deadlift
+
+Correct.
+The thing to lock: enumerate yields a (index, value) pair each pass — that's what the for i, name two-variable unpacking is catching. If you'd written for x in enumerate(exercises), x would be the whole pair (0, "squat"), not just the value. That's the [predict] point the sheet flags.
+
+Question: What does enumerate give you on each pass, and why does for i, name need two variables?
+Answer: Enumerate gives you both the index and the item on each pass, so for i, name needs two variables to receive those two values separately.

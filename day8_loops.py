@@ -11,4 +11,9 @@ readings = [80, 85, 90, None, 100, 105]
 for r in readings:
     if r is None:
         break
-    print(r)        
+    print(r)
+
+
+exercises = ["squat", "bench", "deadlift"]
+for i, name in enumerate(exercises):
+    print(i, name)            
