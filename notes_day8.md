@@ -167,3 +167,39 @@ Trace it: x=1 (odd) → continue, skip print. x=2 (even) → print 2. And so on.
 prediction and run are the same: 
 2
 4
+
+
+EXERCISE 2 
+flag training loads that stray too far from a target. This one's a for loop with a conditional inside (not while — read the goal, pick the honest tool). 
+
+The setup: you have a list of daily loads, a target, and a threshold. For each load, if it deviates from the target by more than the threshold, print a flag line. "Deviation" = absolute difference from target — the abs() we drilled yesterday, reused.
+
+Build it in pieces. First, the data — type into the file:
+
+loads = [100, 105, 130, 98, 75]
+target = 100
+threshold = 20
+
+target is where you want the loads to sit; threshold is how far off is "too far." Type those three lines, tell me when in, then predict on paper (before any loop): eyeballing the list, which loads are more than 20 away from 100? That prediction is your check for when the code runs.
+
+30 is 30 away, 75 is 25 away, both exceed 20. The other three (100, 105, 98) are within 20, so they shouldn't flag. That's your expected output.
+
+Now the loop. You want to check each load against the target, so loop over the values — plain for load in loads, no index needed here (you're not reaching neighbors). Type below the data:
+
+for load in loads:
+    deviation = abs(load - target)
+    if deviation > threshold:
+        print(f"FLAG: {load} is {deviation} off target")
+
+Read the structure:
+
+deviation = abs(load - target) — how far this load is from target, sign dropped (30 away is 30 whether over or under).
+if deviation > threshold: — only the too-far ones pass this gate. Note > strictly: a load exactly 20 off would not flag. That's a boundary decision — just be aware you chose it. If deviation >= threshold, then a load exactly 20 off will get flagged. 
+
+The print runs only inside the if, so only flagged loads produce a line.
+
+cherinefons@Mac foundation % python3 day8_loops.py
+FLAG: 130 is 30 off target
+FLAG: 75 is 25 off target
+cherinefons@Mac foundation % 
+
