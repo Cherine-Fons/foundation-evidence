@@ -29,4 +29,15 @@ names = ["squat", "bench", "deadlift", "row"]
 weights = [100, 80]
 for name, w in zip(names, weights):
     print(f"{name}: {w}kg")
-    
+
+
+# cap: stop as soon as cumulative tonnage would exceed 5000 kg
+lifts = [1200, 1500, 1800, 2000, 900]
+cap = 5000
+total = 0
+for lift in lifts:
+    if total + lift > cap:
+        break
+    total = total + lift
+    print(f"Added {lift}, total now {total}")
+

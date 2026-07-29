@@ -346,3 +346,106 @@ bench: 80kg
 Here's the lesson — only two lines. zip stops at the shorter list. It paired squat/100 and bench/80, then ran out of weights and quit — "deadlift" and "row" are silently dropped. No error, no warning; the extra names just vanish.
 
 That's the behavior to know, not guess: zip truncates to the shortest input. The danger is the silence — if your two lists are supposed to be the same length and aren't, zip won't tell you; it'll just quietly process fewer items. That's a bug-hiding trap, same family as the zip-drops and vols[-1]-wraparound cases you've been meeting.
+
+EXERCISE 6
+the cumulative-tonnage cap. This combines an accumulator (like your running total) with a break (stop the moment a limit is breached). Real pattern: process planned lifts, adding up total tonnage, and quit early once you'd exceed a cap.
+
+The sheet says define the cap in a comment first — that's a spec-before-code habit, same as your Week-1 boundary decisions.
+
+Into day8_loops.py, below Exercise 5. First the data and the spec comment:
+
+# cap: stop as soon as cumulative tonnage would exceed 5000 kg
+lifts = [1200, 1500, 1800, 2000, 900]
+cap = 5000
+total = 0
+
+total = 0 is the accumulator — outside the loop, as you drilled. Type those four lines.
+
+Then, before the loop, the paper work: walk lifts by hand, adding each to a running total, and find where cumulative tonnage would first exceed 5000. 1200 → 2700 → 4500 → then +2000 would be 6500, over the cap. Predict: at which lift does it break, and what gets printed before it stops?
+
+PREDICTION:
+it breaks at 1800 and 4500 gets printed before it breaks
+
+Your paper math is right: 1200 → 2700 (after 1500) → 4500 (after 1800) → adding 2000 would make 6500, which is over 5000. So the loop should stop when it reaches the 2000 lift.
+
+But watch the wording carefully. Two ways to build this, and they print differently:
+
+Option A — check before adding: "would adding this lift exceed the cap? if so, break before adding it." Then you break at the 2000 lift, and 2000 never gets added or printed.
+
+Option B — add first, then check: add the lift, and if total now exceeds cap, break after. Then 2000 does get added (total = 6500) and maybe printed before breaking.
+
+Your prediction ("breaks at 1800, 4500 printed") suggests you're picturing something slightly different — you have it breaking at 1800, but 1800 is fine (4500 is under 5000). The break happens at the next lift, 2000. Let me give you the Option A version so it matches the spec comment ("stop as soon as cumulative tonnage would exceed"):
+
+for lift in lifts:
+    if total + lift > cap:
+        break
+    total = total + lift
+    print(f"Added {lift}, total now {total}")
+
+Trace it: total + lift > cap checks the hypothetical total before committing. When lift=2000, 4500 + 2000 = 6500 > 5000 → break, before adding. So 2000 never prints.
+
+So the full program is:
+# cap: stop as soon as cumulative tonnage would exceed 5000 kg
+lifts = [1200, 1500, 1800, 2000, 900]
+cap = 5000
+total = 0
+for lift in lifts:
+    if total + lift > cap:
+        break
+    total = total + lift
+    print(f"Added {lift}, total now {total}")
+
+
+PREDICTION:
+Added 1200, total now 1200
+Added 1500, total now 2700
+Added 1800, total now 4500
+Added 2000, total now 6500
+
+break
+
+Evaluation of my prediction:
+Careful — reread the loop order. Look at where break sits relative to the print.
+
+if total + lift > cap:
+    break
+total = total + lift
+print(...)
+
+When lift=2000: the first thing that happens is the check 4500 + 2000 = 6500 > 5000 → true → break fires immediately. The total = total + lift and print lines below it never run for 2000. So there's no "Added 2000, total now 6500" line — the break jumps out before reaching the print.
+
+Your first three lines are right. The fourth shouldn't appear at all.
+Revised prediction:
+Added 1200, total now 1200
+Added 1500, total now 2700
+Added 1800, total now 4500
+
+break
+
+run:
+>>> # cap: stop as soon as cumulative tonnage would exceed 5000 kg
+... lifts = [1200, 1500, 1800, 2000, 900]
+... cap = 5000
+... total = 0
+... for lift in lifts:
+...     if total + lift > cap:
+...         break
+...     total = total + lift
+...     print(f"Added {lift}, total now {total}")
+...     
+Added 1200, total now 1200
+Added 1500, total now 2700
+Added 1800, total now 4500
+>>> 
+The break fired at 2000 before the print, so 2000 never appeared. And notice: the 900 at the end of the list also never printed — once break exits, the loop is done, even though 900 would've fit under the cap. That's break's nature: it leaves entirely, it doesn't "skip and continue."
+
+This is the combined pattern — accumulator + early exit — which is exactly the shape a lot of real algorithms take (process until a budget/limit/condition trips). You built it correctly, and the "check before committing" ordering is the subtle part you now have.
+
+FINAL QUESTION :
+Why does checking total + lift > cap before adding matter — what would print differently if you added first, then checked?
+
+ANSWER: 
+Before adding matters because it asks whether the next lift would push the total past 5000, and stops before changing total. If we added and printed first, then checked, the cap would already have been violated. Even if we added first and checked before printing, total would still become 6500, so the program’s stored result would be wrong even though the bad line was hidden.
+
+
+
