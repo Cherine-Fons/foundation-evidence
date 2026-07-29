@@ -119,7 +119,7 @@ Pass 4: is 0 > 0? no → stop
 So it prints the starting value too. 
 The mental model to lock: the condition is checked at the top of each pass, and the body runs with n at its current value before the decrement. My prediction started counting from after the first subtract — that's the off-by-one to notice.
 
-next, type the same countdown, but leave out the n = n - 1 line:
+Next, type the same countdown, but leave out the n = n - 1 line:
 
 n = 3
 while n > 0:
@@ -135,3 +135,35 @@ It continues until we interrupt the program with Ctrl+C.
 CONCLUSION:
 The lesson locked: a while loop needs its condition to eventually become false, or it runs forever. The line that moves toward the exit (n = n - 1 in the working version) is not optional — it's what makes the loop terminate. Forgetting it is the single most common while bug.
 
+NEXT,
+break and continue — two ways to steer a loop from inside its body.
+**break exits the loop immediately — jumps out entirely, skips any remaining passes.**
+**continue skips the rest of the current pass and jumps to the next one — the loop keeps going.**
+
+>>> for x in [1, 2, 3, 4, 5]:
+ ...     if x == 3:
+ ...         break
+ ...     print(x)
+
+ Trace it: x=1 → is it 3? no → print 1. x=2 → no → print 2. x=3 → yes → break, jump out entirely. So 4 and 5 never happen.
+
+ prediction and run are the same: 
+1
+2
+>>> 
+Note the order inside the pass: the if check happens before print(x), so when x hits 3, break jumps out and 3 never prints.
+
+Now continue — the contrast. 
+
+for x in [1, 2, 3, 4, 5]:
+    if x % 2 == 1:
+        continue
+    print(x)
+
+Recall % is remainder: x % 2 == 1 is true for odd numbers. So when x is odd, continue fires — skips the rest of this pass (skips print) and moves to the next number. When x is even, the if is false, so print(x) runs.
+
+Trace it: x=1 (odd) → continue, skip print. x=2 (even) → print 2. And so on. Predict exactly what prints, then run. Show me both.
+
+prediction and run are the same: 
+2
+4
