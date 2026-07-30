@@ -6,3 +6,13 @@ for ticker, sector in pairs:
     else:
         by_sector[sector].append(ticker)
 print(by_sector)
+
+
+foods = ["apple", "banana", "apple", "apple", "banana", "cherry"]
+counts = {}
+for food in foods:
+    if food not in counts:
+        counts[food] = 1
+    else:
+        counts[food] = counts[food] + 1
+print(counts)
