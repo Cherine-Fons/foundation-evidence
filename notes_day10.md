@@ -257,6 +257,7 @@ Contrast with the earlier flat case: c = a[:] gave you a fully independent copy 
 
 Why this matters for you specifically: your accumulation pattern builds dicts whose values are lists. If you ever copy such a structure with [:] and then mutate an inner list, you can silently corrupt the "original." It's the exact bug family the sheet's Day-10 bug hunt (Exercise 5) makes you trigger on purpose — the "same list object appended to every key" trap.
 
+Conclusion:
 
 b = a does not make a copy; a and b refer to the same list, and appending through b changes a too, proving they share one object.
 
