@@ -323,4 +323,127 @@ Predict the two printed lines.
 1 a
 2 b
 >>> 
+----------------------------------------------------------------------------------------------------------------------
+EXERCISE 5 Bug hunt
 
+Three bugs, all reference/aliasing traps. First one:
+
+Bug 1 — the "reset" that doesn't reset. Type into a scratch file or >>>:
+
+def reset(xs):
+    xs = []
+
+my_list = [1, 2, 3]
+reset(my_list)
+my_list
+
+The intent: reset is supposed to empty the list. Predict: after calling reset(my_list), is my_list empty [], or still [1, 2, 3]?
+
+The surprise you'll find: xs = [] inside the function doesn't change the caller's list. Reason to hold before running — xs = [] makes xs point at a brand-new empty list, but that just re-points the local name xs; it doesn't touch the original list my_list was pointing at. Re-assigning a name is different from mutating the object.
+
+Predict what my_list prints, run, show me. Then one sentence on why the reset failed.
+
+>>> def reset(xs):
+...         xs = []
+... my_list = [1, 2, 3]
+... reset(my_list)
+... my_list
+...         
+[1, 2, 3]
+
+The intent: reset is supposed to empty the list. Predict: after calling reset(my_list), is my_list empty [], or still [1, 2, 3]?
+
+The surprise you'll find: xs = [] inside the function doesn't change the caller's list. Reason to hold before running — xs = [] makes xs point at a brand-new empty list, but that just re-points the local name xs; it doesn't touch the original list my_list was pointing at. Re-assigning a name is different from mutating the object.
+
+Why: inside the function, xs = [] makes the local name xs point at a new empty list. But my_list (out in the caller) is still pointing at the original [1, 2, 3]. You re-pointed a label; you didn't touch the object the caller cares about. Re-assigning a name (xs = ...) only moves that one local label — it can't reach back and change what the caller's variable points to.
+
+Contrast — this would have worked: xs.clear() or xs.pop() in a loop, because those mutate the actual list object (which both names share). The distinction is the same one from the copy-vs-reference drill: mutate the object (visible to all names) vs. reassign the name (local only).
+
+
+Then Bug 2 — the aliasing trap inside the accumulation pattern, the one most directly relevant to your work.
+
+Type it:
+
+row = [0, 0]
+grid = []
+for i in range(3):
+    grid.append(row)
+grid[0][1] = 99
+grid
+
+The intent: build a grid of three separate [0, 0] rows. Predict: after setting grid[0][1] = 99 (changing one row's second element), what does grid look like? Should be [[0, 99], [0, 0], [0, 0]] if the rows are separate...
+
+Predict grid, run, show me. Watch what happens to all three rows.
+
+
+>>> row = [0, 0]
+... grid = []
+... for i in range(3):
+...     grid.append(row)
+... grid[0][1] = 99
+... grid
+... 
+[[0, 99], [0, 99], [0, 99]]
+
+There it is — the trap. You changed one cell, grid[0][1], and all three rows became [0, 99]. Not just the first.
+
+Why: the loop appended row three times — but it's the same row object each time. grid doesn't hold three separate lists; it holds three references to the one row. So grid[0], grid[1], grid[2] are all the same list. Change it through any one, all three "see" it — because there's only one list, referenced thrice.
+
+This is the aliasing trap, and it's the one the sheet warns lives inside the accumulation pattern. Picture it in your dict-building: if you initialized several dict keys to "the same list" and then appended, every key's list would grow together — a silent corruption exactly like this grid. The fix is to make a fresh list each pass — e.g., grid.append(row[:]) or grid.append([0, 0]) inside the loop — so each row is its own object.
+
+
+>>> row = [0, 0]
+... 
+... grid = []
+... 
+... for i in range(3):
+... 
+...     grid.append(row[:])
+... 
+... grid[0][1] = 99
+... 
+... grid
+... 
+[[0, 99], [0, 0], [0, 0]]
+>>> 
+
+There's the fix working — [[0, 99], [0, 0], [0, 0]]. Now only the first row changed, because row[:] appended a fresh copy each pass, so the three rows are independent objects. Same concept as the shallow-copy exercise, applied inside a loop: row[:] breaks the aliasing.
+
+So you've seen both sides: grid.append(row) → three aliases of one list (change one, all change); grid.append(row[:]) → three independent lists (change one, others safe). That's the aliasing trap and its cure, and it's the single most practically-important bug in F2 because it hides inside the exact dict-and-list building you'll do in the capstone.
+
+Bug 3 — the empty-set mistake. Predict, run:
+
+s = {}
+type(s)
+
+Everyone assumes {} is an empty set (curly braces, like sets use). Predict what type(s) reports — is it a set, or something else? Run it and read the type name.
+
+
+Syntax Error
+
+
+Then: how do you actually make an empty set? (Hint: there's a function for it — you used it on Day 10 Exercise 1 to convert a list.) Try:
+
+s2 = set()
+type(s2)
+
+Predict both types, run.
+
+
+
+>>> s = {}
+... type(s)
+... 
+<class 'dict'>
+>>> 
+
+
+>>> s2 = set()
+... type(s2)
+... 
+<class 'set'>
+
+Conclusion:
+1. xs = [] only reassigns the local parameter to a new list, so the caller’s list stays unchanged; use xs.clear() to empty the original list, or return a new list and assign it outside the function.
+2. Every dictionary key points to the same reused list, so appending through one key changes them all; create a fresh list separately for each key before appending.
+3. {} creates an empty dictionary, not an empty set; use s = set() to create an empty set.
