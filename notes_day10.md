@@ -176,4 +176,92 @@ This connects straight to your capstone: your multigraph edges will be (u, v) tu
 Conclusion:
 Use a tuple for a fixed pair such as an edge (0, 1) that should not change, and use a list when you need a collection you may add to, remove from, or modify. A list cannot be a dictionary key because it is mutable, so its contents—and therefore its identity for lookup—could change; dictionary keys must be hashable and stable.
 -----------------------------------------------------------------------------------------------------------------------
+EXERCISE 3 copy vs reference
 
+The one idea up front: b = a does not copy a list — it makes a second name for the same list. One list, two labels. Change it through either name and both names see it, because there's only one underlying list.
+
+prove it:
+a = [1, 2, 3]
+b = a
+b.append(4)
+a
+
+The key prediction: b.append(4) adds to the list through b. What is a afterward — still [1, 2, 3], or [1, 2, 3, 4]? (If b were a real copy, a would be untouched. If b is just another name for the same list, a changes too.)
+
+Predict what a prints, run all four lines:
+[1, 2, 3, 4]
+
+>>> a = [1, 2, 3]
+... b = a
+... b.append(4)
+... a
+... 
+[1, 2, 3, 4]
+>>> 
+
+This is the thing that surprises people and causes silent bugs: you think you have two independent lists, you modify one, and the "other" changes too — because they were never separate.
+
+Now the fix — how to make a real copy. Predict this block:
+
+c = a[:]
+c.append(5)
+a
+
+a[:] is a full slice — and a slice, as you learned on Day 7, returns a new list. So c is a genuine copy, independent of a. Then c.append(5) changes only c.
+
+The key prediction: after appending 5 to c, what is a? Does it stay [1, 2, 3, 4], or become [1, 2, 3, 4, 5]? (Contrast with what just happened — this time it's a real copy.)
+
+Predict a, run all three lines:
+[1, 2, 3, 4]
+
+but running c gives:
+[1, 2, 3, 4, 5]
+
+>>> c = a[:]
+... c.append(5)
+... a
+... 
+[1, 2, 3, 4]
+>>> c
+[1, 2, 3, 4, 5]
+>>> 
+Exactly right, and you tested it the smart way — checking both a and c to see they diverged. a stayed [1, 2, 3, 4] (untouched), while c became [1, 2, 3, 4, 5]. This time they're independent, because a[:] made a real copy — a separate list. Appending to c couldn't touch a.
+
+So the contrast, side by side:
+
+b = a → same list, two names. Change one, both change.
+c = a[:] → new independent list. Change one, the other is safe.
+
+That's the whole distinction, and it's the drill's core. But there's a sting in the tail — a case where a[:] looks like a copy but isn't fully. Predict this carefully:
+
+outer = [[1, 2], [3, 4]]
+copy = outer[:]
+copy[0].append(99)
+outer
+
+Here outer is a list containing lists. outer[:] copies the outer list — but the inner lists are still shared (the copy holds references to the same inner lists). So copy[0] and outer[0] are the same inner list.
+
+The key prediction: copy[0].append(99) appends to the inner list at position 0. Does outer change? Look at outer[0] — is it still [1, 2], or [1, 2, 99]?
+
+Predict what outer prints, run.
+
+>>> outer = [[1,2],[3,4]]
+>>> copy = outer[:]
+>>> copy[0].append(99)
+>>> outer
+[[1, 2, 99], [3, 4]]
+
+outer[:] copied the outer list — so outer and copy are different outer lists. But the copy didn't reach inside: both outer lists still hold references to the same two inner lists. So copy[0] and outer[0] are literally the same inner list [1, 2]. Append 99 through one name, both see it.
+
+Contrast with the earlier flat case: c = a[:] gave you a fully independent copy because the elements were plain numbers — numbers can't be shared-and-mutated the way lists can. The moment your list contains other lists (or dicts), [:] only copies the top layer. This is called a shallow copy: one level deep, shared underneath.
+
+Why this matters for you specifically: your accumulation pattern builds dicts whose values are lists. If you ever copy such a structure with [:] and then mutate an inner list, you can silently corrupt the "original." It's the exact bug family the sheet's Day-10 bug hunt (Exercise 5) makes you trigger on purpose — the "same list object appended to every key" trap.
+
+
+b = a does not make a copy; a and b refer to the same list, and appending through b changes a too, proving they share one object.
+
+c = a[:] makes a new outer list, so appending 5 to c does not change the original flat list a.
+
+For a nested list, outer[:] still copies only the outer list; the inner lists remain shared, so changing an inner list through the copy also changes what appears inside the original.
+----------------------------------------------------------------------------------------------------------------------
+EXERCISE 4 
