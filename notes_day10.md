@@ -265,4 +265,62 @@ c = a[:] makes a new outer list, so appending 5 to c does not change the origina
 
 For a nested list, outer[:] still copies only the outer list; the inner lists remain shared, so changing an inner list through the copy also changes what appears inside the original.
 ----------------------------------------------------------------------------------------------------------------------
-EXERCISE 4 
+EXERCISE 4 unpacking
+
+Three quick moves, all about pulling values out of collections into separate variables.
+
+First, star-unpacking. Predict, run in >>>:
+
+nums = [10, 20, 30, 40]
+head, *rest = nums
+head
+rest
+
+head, *rest = nums splits the list: head grabs the first element, and *rest (the star) scoops up everything else into a list. So head = 10, rest = [20, 30, 40].
+
+Predict what head and rest each hold, run.
+
+>>> nums = [10, 20, 30, 40]
+... head, *rest = nums
+... head
+... rest
+... 
+[20, 30, 40]
+>>> head
+10
+
+Now the other two unpacking moves. Predict each, then run:
+
+Swap:
+
+x = 1
+y = 2
+x, y = y, x
+x
+y
+
+Predict x and y after the swap line.
+
+2
+1
+
+
+Pair unpacking in a loop:
+
+pairs = [(1, "a"), (2, "b")]
+for num, letter in pairs:
+    print(num, letter)
+
+Predict the two printed lines.
+
+1 a 
+2 b
+
+>>> pairs = [(1, "a"), (2, "b")]
+... for num, letter in pairs:
+...     print(num, letter)
+...     
+1 a
+2 b
+>>> 
+
