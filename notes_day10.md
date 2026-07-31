@@ -49,8 +49,9 @@ print(by_type)
 
 **Done when:** you can explain, without notes, why `b = a` is not a copy, what `a[:]` does and doesn't copy, and when a tuple is the right key.
 
-
+------------------------------------------------------------------------------------------------------------------------
 EXERCISE 1 sets
+
 A set is a collection with no duplicates and no order. Its whole job: hold unique things. Where a list keeps everything you put in (including repeats) in order, a set silently collapses duplicates and doesn't track position.
 
 In >>>, build one from a list that has duplicates:
@@ -102,3 +103,77 @@ a & b       {3}
 >>> a & b
 {3}
 >>> 
+-----------------------------------------------------------------------------------------------------------------------
+EXERCISE 2 tuples 
+
+A tuple is like a list, but immutable: once made, you can't change its contents. That one property is the whole point, and it's what lets tuples do a job lists can't.
+
+Build it:
+point = (3, 4)
+point[0]
+point[0] = 5
+
+(3, 4) — round brackets make a tuple (vs. square for a list).
+point[0] — indexing works just like a list.
+point[0] = 5 — trying to change an element. Predict the error type first: you've met one for missing dict keys (KeyError), one for out-of-range... this is "you tried to modify something that can't be modified." Take your best guess at the name.
+
+Prediction:
+point[0]
+3
+
+point[0] = 5
+SyntaxError
+
+>>> point = (3,4)
+>>> point[0]
+3
+>>> point[0] = 5
+Traceback (most recent call last):
+  File "<python-input-89>", line 1, in <module>
+    point[0] = 5
+    ~~~~~^^^
+TypeError: 'tuple' object does not support item assignment
+>>> 
+
+Note: 
+A SyntaxError means the code is malformed — Python can't even understand it (like your missing colon). It's caught before running.
+A TypeError means the code is valid Python, but you asked an object to do something its type doesn't allow.
+
+So the tell: assignment-to-an-element is legal syntax, so a failure there is about the object's type/behavior (TypeError), not malformed code (SyntaxError). point[0] returned 3 correctly — reading is fine; only writing is blocked.
+
+Why immutability matters: tuples can be dict keys, lists can't. 
+Predict each:
+d = {}
+d[(0, 1)] = "edge A"
+d[(1, 2)] = "edge B"
+d[(0, 1)]
+
+prediction: 'edge A'
+
+try
+d[[0, 1]] = "nope"
+ prediction = Type Error
+
+ >>> d = {}
+>>> 
+>>> d = {}
+>>> d[(0,1)] = "edge A"
+>>> d[(1,2)] = "edge B"
+>>> d[(0,1)]
+'edge A'
+>>> d[[0, 1]] = "nope"
+Traceback (most recent call last):
+  File "<python-input-96>", line 1, in <module>
+    d[[0, 1]] = "nope"
+    ~^^^^^^^^
+TypeError: cannot use 'list' as a dict key (unhashable type: 'list')
+>>> 
+
+The word to notice is unhashable. The short version of why: dicts need keys that are guaranteed stable — if a key could change after you stored something under it, the dict couldn't find it again. Tuples are immutable, so they're stable → usable as keys. Lists can change, so they're forbidden. You don't need the full mechanism now; the rule is: immutable things (tuples) can be keys; mutable things (lists) can't.
+
+This connects straight to your capstone: your multigraph edges will be (u, v) tuples, and you'll key a dict by those pairs — exactly what you just did with (0, 1) → "edge A". That's not a coincidence; it's why the sheet drills tuples now.
+
+Conclusion:
+Use a tuple for a fixed pair such as an edge (0, 1) that should not change, and use a list when you need a collection you may add to, remove from, or modify. A list cannot be a dictionary key because it is mutable, so its contents—and therefore its identity for lookup—could change; dictionary keys must be hashable and stable.
+-----------------------------------------------------------------------------------------------------------------------
+
