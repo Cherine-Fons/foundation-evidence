@@ -33,3 +33,12 @@ for u, v in edges:
     else:
         degree[v] = degree[v] + 1
 print(degree)
+
+# capacity f[v]: the maximum degree vertex v is allowed
+f = {0: 3, 1: 3, 2: 2, 3: 5}
+# a vertex is over capacity when its degree strictly exceeds f[v]
+over = []
+for v in degree:
+    if degree[v] > f[v]:
+        over.append(v)
+print(over)
