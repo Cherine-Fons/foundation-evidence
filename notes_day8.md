@@ -393,7 +393,7 @@ for lift in lifts:
     if total + lift > cap:
         break
     total = total + lift
-    print(f"Added {lift}, total now {total}")
+print(f"Added {lift}, total now {total}")
 
 
 PREDICTION:
