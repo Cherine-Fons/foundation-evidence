@@ -1,17 +1,26 @@
 # Write the loop building total_sets (exercise → summed sets), your paper prediction first, then run.
+# data: sessions = [
+#  {"exercise": "squat", "sets": 5},
+#  {"exercise": "bench", "sets": 3}
+#  {"exercise": "squat", "sets": 4},
+#  {"exercise": "row", "sets": 3},
+#  {"exercise": "bench", "sets": 2},
+# ]
 
-{'squat': 5, 'bench': 7, 'deadlift': 1}
-sets_by_exercise = [
-    ("squat", 3),
-    ("bench", 4),
-    ("squat", 2),
-    ("deadlift", 1),
-    ("bench", 3),
+sessions = [
+    {"exercise": "squat", "sets": 5},
+    {"exercise": "bench", "sets": 3},
+    {"exercise": "squat", "sets": 4},
+    {"exercise": "row", "sets": 3},
+    {"exercise": "bench", "sets": 2},
 ]
 
 total_sets = {}
 
-for exercise, sets in sets_by_exercise:
+for session in sessions:
+    exercise = session["exercise"]
+    sets = session["sets"]
+
     if exercise not in total_sets:
         total_sets[exercise] = sets
     else:
