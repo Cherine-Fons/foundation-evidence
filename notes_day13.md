@@ -115,3 +115,63 @@ Type "help", "copyright", "credits" or "license" for more information.
 *count_degrees is pure because it takes edges, computes a new degree dictionary locally, and returns that result without changing edges or anything outside the function. The same input produces the same output.*
 
 *It deliberately does not print, modify global data, or decide how the result should be displayed. Keeping print() outside means the returned dictionary can be tested, stored, reused, or passed into another function such as find_over_capacity.*
+-----------------------------------------------------------------------------------------------------------------------
+**Now abs_diffs**
+
+Open helpers.py and add this function below count_degrees. Retype it fresh — don't paste:
+
+def abs_diffs(values):
+    diffs = []
+    for i in range(1, len(values)):
+        diffs.append(abs(values[i] - values[i - 1]))
+    return diffs
+
+Index loop from 1 (so i-1 always has a predecessor), abs() for the nonnegative invariant, append into a fresh list, return — no print.
+
+Type it, save. Then predict what abs_diffs([10, 13, 8, 8]) returns — walk it: |13−10|, |8−13|, |8−8|. Show me the function and your prediction.
+
+PREDICTION:
+[3, 5, 0]
+
+>>> import helpers
+>>> helpers.abs_diffs([10, 13, 8, 8])
+[3, 5, 0]
+>>> 
+
+## CORRECT
+
+-----------------------------------------------------------------------------------------------------------------------
+**Now find_over_capacity**
+
+Add it below abs_diffs in helpers.py. Spec: two dicts in (degrees, capacities), returns the list of vertices whose degree strictly exceeds capacity.
+
+def find_over_capacity(degree, capacity):
+    over = []
+    for v in degree:
+        if degree[v] > capacity[v]:
+            over.append(v)
+    return over
+
+Loop the vertices in degree, look up both degree[v] and capacity[v], strict >, append the violators, return the list. No print.
+
+Type it, save, restart the interpreter (exit() → python3), then:
+
+import helpers
+helpers.find_over_capacity({0: 2, 1: 4, 2: 2}, {0: 3, 1: 3, 2: 2})
+
+Predict first: vertex 0 (2 vs 3), vertex 1 (4 vs 3), vertex 2 (2 vs 2 — strict, so not over). Which vertices come back? Show me your prediction and the result.
+
+PREDICTION:
+[1]
+
+CORRECT. Colon fixed, module loads, third pure helper verified. Only vertex 1 (4 > 3) came back; vertex 2 at exactly capacity correctly stayed out (strict >).
+
+>>> import helpers
+
+>>> helpers.find_over_capacity({0: 2, 1: 4, 2: 2}, {0: 3, 1: 3, 2: 2})
+
+[1]
+
+>>> 
+
+returns True when the sum is even (% 2 == 0) AND a <= b, False otherwise. The and combines both conditions into a single bool — which is the invariant (always returns a bool). No if needed; the comparison expression is the boolean.
