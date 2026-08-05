@@ -47,3 +47,71 @@ __pycache__/
 .DS_Store
 
 Each line tells git "pretend this doesn't exist." .venv/ (your bin — regenerable, don't track), __pycache__/ (Python's bytecode cache — the stragglers from F2), .DS_Store (macOS folder junk). Save the file, then run git status and watch what happens — the untracked items you've been seeing for two weeks should vanish from the list. Show me.
+
+It worked — look at what git status shows now: only .gitignore and notes_day13.md are untracked. The .venv/, __pycache__/, and .DS_Store are gone from the list — git is now ignoring all three, exactly as intended. Two weeks of .DS_Store/__pycache__ clutter, silenced in three lines. That's a clean working tree for the first time since F2.
+
+Commit the venv setup, the .gitignore, and your note together — this is one logical unit (environment setup):
+
+git add .gitignore notes_day13.md
+git commit -m "f3d2: venv setup, gitignore, verified isolation"
+
+Notice you're only adding .gitignore and the notes — the .venv folder isn't staged because git is now ignoring it. That's the whole point: your bin exists on disk and works, but git doesn't track it. Anyone cloning your repo later would recreate their own venv from a requirements.txt (which comes later this week).
+
+Confirm the commit lands, then we move to the actual pure-function work — implementing the four specs you wrote yesterday, now inside this clean environment.
+-----------------------------------------------------------------------------------------------------------------------
+**The concept:**
+
+a pure function takes inputs, returns an output, and does nothing else — no printing, no mutating anything outside itself, no touching its inputs in place. Same inputs → same output, always. That's what makes it testable: F4's pytest can call it with known inputs and check the return, no setup or cleanup. Your specs were written pure by design.
+
+Start with count_degrees — the one you know coldest. Your spec: input is an edge list of (u, v) tuples, output is a dict vertex→degree, invariant Σdeg = 2·|E|. You wrote this logic in Capstone B; retype it fresh here (no paste), as a proper def with return — no print anywhere, because it returns the dict. That return-not-print choice is exactly what keeps it pure.
+
+Shape: def count_degrees(edges):, the accumulation loop over u, v, then return degree. Write it, and predict what count_degrees([(0,1), (0,1), (1,2)]) returns before we test it.
+
+
+def count_degrees(edges):
+    degree = {}
+    for u , v in edges:
+        if u not in degree:
+            degree[u] = 1
+        else:
+            degree[u] = degree[u] + 1
+        if v not in degree:
+            degree[v] = 1
+        else:
+            degree[v] = degree[v] + 1
+    return degree
+print(count_degrees([(0,1), (0,1), (1,2)]))            
+    
+
+**The function is correct — clean accumulation, both endpoints counted, return not print inside the function. That's a proper pure function. But there's one thing to fix, and it's a purity point, not a logic point.**
+
+## Look at your last two lines: the print(...) call is sitting inside helpers.py. That's the issue. A module is a library — when you later write import helpers from another script, Python runs the whole file to load it, and that stray print would fire on every import, spitting output nobody asked for. A helper module should define functions and nothing else — no top-level calls, no prints. That keeps it pure and quiet: importing it should do nothing visible.
+
+"But then how do I test it?" — that's exactly tomorrow's lesson (import it from a separate script and call it there). For today, to verify it works, test it in the >>> interpreter instead of inside the file:
+
+import helpers
+helpers.count_degrees([(0,1), (0,1), (1,2)])
+
+First — your prediction: what should count_degrees([(0,1), (0,1), (1,2)]) return? Walk it: vertex 0 appears in two edges, vertex 1 in three, vertex 2 in one. Write the dict you expect.
+
+Then delete the print line, save, and in >>> run the two lines above. Show me your prediction and the result.
+
+
+PREDICTION:
+{0: 2, 1: 3, 2: 1}
+
+cherinefons@Mac foundation % python3
+Python 3.14.6 (v3.14.6:c63aec69bd5, Jun 10 2026, 08:07:54) [Clang 21.0.0 (clang-2100.1.1.101)] on darwin
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import helpers
+... helpers.count_degrees([(0,1), (0,1), (1,2)])
+... 
+{0: 2, 1: 3, 2: 1}
+
+**{0: 2, 1: 3, 2: 1} — matches your prediction exactly. The import worked, the function ran through the module name, and the pure function returned the right dict. First helper, done and verified from an actual import — which is the whole point of it being a module.** 
+
+## What makes count_degrees a pure function — what does it do, and what does it deliberately not do (the reason no print lives inside it)?
+
+*count_degrees is pure because it takes edges, computes a new degree dictionary locally, and returns that result without changing edges or anything outside the function. The same input produces the same output.*
+
+*It deliberately does not print, modify global data, or decide how the result should be displayed. Keeping print() outside means the returned dictionary can be tested, stored, reused, or passed into another function such as find_over_capacity.*
