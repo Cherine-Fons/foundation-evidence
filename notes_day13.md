@@ -175,3 +175,50 @@ CORRECT. Colon fixed, module loads, third pure helper verified. Only vertex 1 (4
 >>> 
 
 returns True when the sum is even (% 2 == 0) AND a <= b, False otherwise. The and combines both conditions into a single bool — which is the invariant (always returns a bool). No if needed; the comparison expression is the boolean.
+-----------------------------------------------------------------------------------------------------------------------
+**Now is_admissible**
+
+Add it below find_over_capacity in helpers.py:
+
+def is_admissible(a, b):
+    return (a + b) % 2 == 0 and a <= b
+
+Save, restart (exit() → python3), then predict each before running:
+
+import helpers
+helpers.is_admissible(2, 4)
+helpers.is_admissible(3, 4)
+helpers.is_admissible(5, 2)
+
+(2,4): sum 6 even, 2≤4 → True
+(3,4): sum 7 odd → False
+(5,2): 5≤2 false → False
+
+Predict all three, run:
+
+
+cherinefons@Mac foundation % python3
+Python 3.14.6 (v3.14.6:c63aec69bd5, Jun 10 2026, 08:07:54) [Clang 21.0.0 (clang-2100.1.1.101)] on darwin
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import helpers
+>>> helpers.is_admissible(2, 4)
+True
+>>> helpers.is_admissible(3, 4)
+False
+>>> helpers.is_admissible(5, 2)
+False
+>>> 
+
+
+That's all four helpers implemented as pure functions, each specced yesterday and built today: count_degrees, abs_diffs, find_over_capacity, is_admissible — all in helpers.py, all return-not-print, all verified via real imports. That's the day's actual work done, and it's the crossing the sheet named: your Week-2 container logic is now an importable module. That's "I can build a solver component," not just "I can script."
+
+
+## CONSLUSION
+What makes all four pure, and why "no print inside the module" matters for importing?
+
+*All four helpers are pure because each one takes its required information through parameters, computes a result using only those inputs, and returns a new value without changing the inputs or any outside state. For the same valid inputs, they produce the same outputs: degrees return a new dictionary, differences and capacity filtering return new lists, and is_admissible returns a Boolean.*
+
+*Keeping print() out of the helpers separates calculation from display. Their returned values can then be tested, stored, passed into another function, or printed by the calling script.*
+
+*Function definitions are safe during import because their bodies do not run until called. So the clean structure is: the module defines and returns results; the script imports those functions and decides what to print.*
+
