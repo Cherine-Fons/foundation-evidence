@@ -23,4 +23,6 @@ def find_over_capacity(degree, capacity):
         if degree[v] > capacity[v]:
             over.append(v)
     return over
-        
+
+def is_admissible(a, b):
+    return (a + b) % 2 == 0 and a <= b        
