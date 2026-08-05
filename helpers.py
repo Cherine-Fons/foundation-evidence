@@ -11,3 +11,8 @@ def count_degrees(edges):
             degree[v] = degree[v] + 1
     return degree
 
+def abs_diffs(values):
+    diffs = []
+    for i in range(1, len(values)):
+        diffs.append(abs(values[i] - values[i - 1]))
+    return diffs    
