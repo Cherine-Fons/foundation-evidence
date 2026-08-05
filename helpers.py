@@ -16,3 +16,11 @@ def abs_diffs(values):
     for i in range(1, len(values)):
         diffs.append(abs(values[i] - values[i - 1]))
     return diffs    
+
+def find_over_capacity(degree, capacity):
+    over = []
+    for v in degree:
+        if degree[v] > capacity[v]:
+            over.append(v)
+    return over
+        
