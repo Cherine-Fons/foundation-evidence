@@ -25,4 +25,4 @@ def find_over_capacity(degree, capacity):
     return over
 
 def is_admissible(a, b):
-    return (a + b) % 2 == 0 and a <= b        
+    return (a + b) % 2 == 0 and a <= b  
