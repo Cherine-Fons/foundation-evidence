@@ -14,5 +14,12 @@ with open("edges.txt") as f:
         except (ValueError, IndexError):
             bad_rows.append(line)
 
-print("Good edges:", good_edges)
-print("Bad rows:", bad_rows)
+total = len(good_edges) + len(bad_rows)
+print("=== Edge File Validation Report ===")
+print(f"Total rows read: {total}")
+print(f"Valid edges:     {len(good_edges)}")
+print(f"Invalid rows:    {len(bad_rows)}")
+if bad_rows:
+    print("Bad rows:")
+    for row in bad_rows:
+        print(f"  - {row}")
