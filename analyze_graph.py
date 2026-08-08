@@ -7,3 +7,6 @@ print("=== Graph Analysis Report ===")
 print(f"Valid edges: {len(good_edges)}")
 print(f"Invalid rows: {len(bad_rows)}")
 print(f"Degrees: {degrees}")
+capacity = {0: 2, 1: 2, 2: 3, 3: 3}
+over = helpers.find_over_capacity(degrees, capacity)
+print(f"Over capacity: {over}")
