@@ -171,3 +171,67 @@ Type "help", "copyright", "credits" or "license" for more information.
 
 And notice the distinction you just used live: q.bid (field — no parentheses, it's stored data) vs q.mid_price() (method — parentheses, it's a computation). That's the field-vs-method difference, in your hands.
 ---------------------------------------------
+# Last piece of Day 17 — a custom __str__ for a clean printed form. Right now printing q gives the full Quote(ticker='AAPL', ...) repr — fine for debugging, verbose for display. __str__ lets you define a concise human-readable string. Add inside the class, below mid_price:
+
+    def __str__(self):
+        return f"{self.ticker}: {self.bid}/{self.ask}"
+
+Walk it:
+
+__str__ is a special method (the double underscores mark it — "dunder"). Python calls it automatically when you print() an object. Defining it lets you control what printing shows.
+It returns an f-string reaching the object's fields via self — here, AAPL: 150.0/150.2, a compact quote format.
+
+Type it, save, restart, and test the difference:
+---------------------------------------------
+exit()
+python3
+from quote import Quote
+q = Quote("AAPL", 150.0, 150.2, "2026-08-08")
+print(q)
+q
+---------------------------------------------
+Predict: print(q) uses your __str__ (concise), but q alone still shows the full repr. Two different forms, two purposes. Run, show me both:
+
+
+>>> exit()
+cherinefons@Mac foundation % python3
+Python 3.14.6 (v3.14.6:c63aec69bd5, Jun 10 2026, 08:07:54) [Clang 21.0.0 (clang-2100.1.1.101)] on darwin
+Type "help", "copyright", "credits" or "license" for more information.
+>>> from quote import Quote
+>>> q = Quote("AAPL", 150.0, 150.2, "2026-08-08")
+>>> print(q)
+AAPL: 150.0/150.2
+>>> q
+Quote(ticker='AAPL', bid=150.0, ask=150.2, timestamp='2026-08-08')
+>>> 
+------------------------------------------------
+# CONCLUSION
+
+There's the distinction, live on screen:
+
+print(q) → AAPL: 150.0/150.2 — your custom __str__, the concise display form.
+q alone → Quote(ticker='AAPL', bid=150.0, ask=150.2, timestamp='2026-08-08') — the auto-generated __repr__, the full debugging form.
+
+**Two representations, two purposes.**
+__str__ is what you define for humans reading output (print); __repr__ (which @dataclass gave you free) is the complete, unambiguous form for developers/debugging. Python picks __str__ when you print, __repr__ when you just evaluate the object. That's the Ch 6 Review Q2 distinction — and you just saw it rather than memorized it.
+
+**That completes Day 17.** You built your first class: a Quote dataclass with four typed fields, a mid_price method operating on self, and a custom __str__ — the full "data plus behavior bundled into a type" package that CPF's Ch 6 is about, and the foundation for the Edge and Multigraph classes coming in a couple of days.
+------------------------------------------------
+
+# SIDE NOTE
+__repr__ is the object's unambiguous, developer-facing representation — the string Python shows when you evaluate an object without printing it (like typing q alone at >>>), and it's meant to be complete and precise rather than pretty.
+
+You just saw the contrast:
+
+q alone → Quote(ticker='AAPL', bid=150.0, ask=150.2, timestamp='2026-08-08') — that's __repr__. Every field, labeled, exact.
+print(q) → AAPL: 150.0/150.2 — that's __str__. Concise, for humans reading output.
+
+The intended difference in purpose:
+
+__repr__ answers "what is this object, exactly?" — for a developer debugging. The convention is that it should be detailed and, ideally, look like the code you'd type to recreate the object. Notice yours reads almost exactly like the Quote(...) call you'd write to make it — that's the ideal __repr__: unambiguous, reconstruction-like.
+__str__ answers "how should this look to a person?" — for display, reports, user-facing output. Concise, readable, can drop detail.
+
+Which one Python uses:
+
+Type the object bare at >>>, or put it in a list, or when no __str__ exists → __repr__.
+print(obj) or str(obj) → __str__ (and if you didn't define __str__, Python falls back to __repr__).
