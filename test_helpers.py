@@ -11,3 +11,6 @@ def test_abs_diffs_basic():
 
 def test_find_over_capacity_strict():
     assert helpers.find_over_capacity({0: 3}, {0: 3}) == [] 
+
+def test_is_admissible_equal():
+    assert helpers.is_admissible(3, 3) == True
