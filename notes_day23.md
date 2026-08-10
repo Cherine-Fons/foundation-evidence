@@ -334,3 +334,215 @@ So the dtype half of Day 23 is closed. You've got: arrays are single-dtype, * is
 1. np.array([100, 102.5, 101]) → prints array([100. , 102.5, 101. ]). This float array is not saved to any name — you created it, NumPy printed it, and it's gone. You never asked it for its dtype.
 2. prices_arr.dtype → int64. But prices_arr is still the original array from way back: np.array([100, 102, 101]), all integers. That variable never changed. Making a new float array on one line doesn't reach back and mutate a different variable.
 ------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------
+
+# This is the piece that makes 2D and matrices possible later (your Day 27 w.T @ Sigma @ w lives or dies on shape), so we build the intuition now on 1D and small 2D.
+
+Framing first, since .shape is new.
+
+.shape is the array's dimensions, reported as a tuple. Not its length, not its dtype — its structure. And the tuple's length tells you how many dimensions the array has:
+
+# a 1D array of 3 elements → shape (3,) — one number, one dimension
+# a 2D array of 2 rows × 3 columns → shape (2, 3) — two numbers, two dimensions
+the pattern reads outermost-to-innermost: (rows, columns) for 2D
+
+That (3,) with the trailing comma throws people — it's Python's way of writing a one-element tuple (a bare (3) would just be the integer 3 in parentheses). So (3,) means "a tuple containing a single dimension of size 3." You've actually seen that trailing-comma tuple syntax before in plain Python; here it's load-bearing.
+------------------------------------------------------------------------------------
+Predict before running — reason from the framing:
+
+prices_arr holds [100, 102, 101]. Two predictions:
+
+prices_arr.shape — what tuple prints? (attribute, no parens)
+Then I'll give you a 2D array. np.array([[1, 2, 3], [4, 5, 6]]) — a list of two lists, each length 3. What shape does that report — (2, 3) or (3, 2)? Reason it out: which number is rows, which is columns?
+
+Run these at >>>:
+
+prices_arr.shape
+np.array([[1, 2, 3], [4, 5, 6]]).shape
+
+Give me both predictions with reasoning, then the output.
+------------------------------------------------------------------------------------
+# PREDICTION
+
+Predictions:
+
+>>> prices_arr.shape
+(3,)
+
+Reason: prices_arr contains three values in a single dimension:
+
+[100, 102, 101]
+
+So it has one dimension of size 3. The trailing comma matters because (3,) is a one-element tuple.
+
+For the 2D array:
+
+np.array([[1, 2, 3], [4, 5, 6]]).shape
+
+I predict:
+
+(2, 3)
+
+Reason: there are 2 rows, and each row contains 3 columns:
+
+[1, 2, 3]   ← row 1
+[4, 5, 6]   ← row 2
+
+2 rows × 3 columns
+
+So the expected output is:
+
+>>> prices_arr.shape
+(3,)
+
+>>> np.array([[1, 2, 3], [4, 5, 6]]).shape
+(2, 3)
+
+# The rule to lock in is:
+
+For a 2D NumPy array, .shape reads (rows, columns).
+
+------------------------------------------------------------------------------------
+# EVAL
+
+Both exactly right. Read what you proved:
+(3,) — one dimension, three elements, trailing comma flagging it as a single-element tuple.
+(2, 3) — two lists on the outside → 2 rows; each list holds three elements → 3 columns. Outer count is rows, inner length is columns. That reading order — outermost bracket first — is the rule that stops you second-guessing (2,3) vs (3,2) every time.
+------------------------------------------------------------------------------------
+ # NEXT
+
+ Now the second half of the piece: vectorized arithmetic between two arrays. So far you've done array-and-scalar (prices_arr * 2). Now array-and-array, which is where the real work happens — think returns computed across two price series, portfolio weights times asset values, that whole family.
+
+Framing: when two arrays of the same shape meet under +, -, *, /, the operation happens element-by-element, position-matched. Position 0 with position 0, position 1 with position 1, and so on. No loop. The shapes must line up.
+------------------------------------------------------------------------------------
+Predict before running. You have prices_arr = [100, 102, 101]. Set up a second array and operate:
+
+1. costs = np.array([10, 12, 11]), then prices_arr - costs — what array comes back, and walk the position-matching: what happens at each of the three slots?
+
+2. Now the one that teaches the rule by breaking it: prices_arr * np.array([2, 3]) — a length-3 array times a length-2 array. Shapes don't match. Predict — does NumPy pad it, recycle the short one, or error? (You have no reason to assume it silently guesses; think about what a numerical engine should do when asked something ambiguous.)
+
+Run at >>>:
+
+costs = np.array([10, 12, 11])
+prices_arr - costs
+prices_arr * np.array([2, 3])
+
+Both predictions with reasoning, then the output — and for #2, read the error type bottom-up like any traceback.
+------------------------------------------------------------------------------------
+# PREDICTION
+
+Predictions:
+1. 
+```python
+costs = np.array([10, 12, 11])
+prices_arr - costs
+```
+
+gives:
+
+```python
+array([90, 90, 90])
+```
+
+because NumPy matches the arrays position by position:
+
+```text
+100 - 10 = 90
+102 - 12 = 90
+101 - 11 = 90
+```
+
+So this is **elementwise subtraction**.
+
+2. For:
+
+```python
+prices_arr * np.array([2, 3])
+```
+
+I predict an error. The shapes are:
+
+```python
+prices_arr.shape                 # (3,)
+np.array([2, 3]).shape           # (2,)
+```
+
+NumPy cannot pair three positions with two positions in a valid way here. It does **not** pad the shorter array or recycle values.
+
+You should get a `ValueError`, typically:
+
+```text
+ValueError: operands could not be broadcast together with shapes (3,) (2,)
+```
+-----------------------------------------------
+So the session should look roughly like:
+
+```python
+>>> costs = np.array([10, 12, 11])
+
+>>> prices_arr - costs
+array([90, 90, 90])
+
+>>> prices_arr * np.array([2, 3])
+Traceback (most recent call last):
+    ...
+ValueError: operands could not be broadcast together with shapes (3,) (2,)
+```
+
+Read the traceback **bottom-up**: first identify the error type, `ValueError`, then the reason—NumPy could not make shapes `(3,)` and `(2,)` compatible.
+
+# The lesson is:
+
+> **Elementwise operations need compatible shapes. NumPy will not silently guess how mismatched numerical data should line up.**
+----------------------------------------------
+
+# FEEDBACK
+
+#1 dead right — [100-10, 102-12, 101-11] = array([90, 90, 90]), each slot subtracted against its position-match. (Nice coincidence that they all land on 90; the mechanism is position-by-position, the equal answers are just the numbers you happened to pick.)
+
+#2  The whole skill this week is reading the error, not just predicting one exists. So run the line and let's look at the actual traceback:
+
+prices_arr * np.array([2, 3])
+
+When it fires, read it bottom-up like we always do, and tell me:
+
+The error type — the last line, the SomethingError: name.
+In plain words, what does the message say the problem is? NumPy is usually specific here — it names the two shapes and tells you they can't be lined up.
+
+The reason this matters: shape-mismatch is the most common NumPy bug you'll hit all week, and Day 29's quiz has a mandatory shape-mismatch-debugging question. So the goal isn't "I knew it'd break" — it's "I can read the break and know instantly it's a shape problem." Run it and paste the full traceback.
+-------------------------------------------------
+# WHAT WE SEE IN >>>
+
+>>> costs = np.array([10, 12, 11])
+>>> prices_arr - costs
+array([90, 90, 90])
+>>> prices_arr * np.array([2, 3])
+Traceback (most recent call last):
+  File "<python-input-12>", line 1, in <module>
+    prices_arr * np.array([2, 3])
+    ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+ValueError: operands could not be broadcast together with shapes (3,) (2,) 
+>>> 
+-------------------------------------------------
+# FEEDBACK
+
+That's the one — read it bottom-up and it hands you everything:
+
+Error type: ValueError — the last line, the name to log in your head.
+The message: operands could not be broadcast together with shapes (3,) (2,). NumPy names both shapes for you — (3,) and (2,) — and says it can't line them up. That's a shape-mismatch, spelled out. You never have to guess; the error tells you the two shapes that collided.
+
+Bank that phrase: "could not be broadcast together with shapes" = you tried to operate on two arrays whose shapes don't align. The instant you see it, you go look at the two .shapes, not the values. That's the Day 29 quiz question answered five days early.
+
+And notice the word that showed up: broadcast. NumPy didn't say "shapes must be equal" — it said they couldn't be broadcast. That's a hint that same-shape isn't the only thing that works — there's a set of rules for when mismatched shapes can combine (a scalar against an array, which you already did with * 2, is the simplest case of it). That's Day 25's material — broadcasting proper. Today you just needed to see that unrelated shapes like (3,) and (2,) cleanly refuse.
+-------------------------------------------------
+# CONCLUSION
+
+So Day 23 is now fully closed. Complete ledger:
+
+# numpy installed to the venv, requirements refreshed
+# *: element-wise on arrays vs sequence-repeat on lists
+# single dtype, upcast toward information-preserving type; .dtype = type + width, per-array
+# .shape = dimensions as a tuple; outer bracket = rows, inner length = columns
+# array-and-array arithmetic is position-matched, same shape required
+# shape-mismatch → ValueError: ... could not be broadcast together with shapes ..., read bottom-up
+# venv trap (python not python3) hit and fixed
