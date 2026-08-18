@@ -7,6 +7,3 @@ def simple_return(old_price: float, new_price: float) -> float:
 
 def test_simple_return():
     assert simple_return(100, 110) == pytest.approx(0.1)
-
-
-
