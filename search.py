@@ -103,7 +103,6 @@ from evaluator import density
 from instance import VERTICES
 from primitives import boundary
 
-
 # ==================================================================================================
 # SEARCH RESULT
 # ==================================================================================================
@@ -313,4 +312,3 @@ def find_max_density():
         )
 
     return best
-

@@ -29,7 +29,6 @@ from admissibility import is_admissible
 from primitives import boundary, internal_edge_count
 from search import find_max_density
 
-
 # ==================================================================================================
 # TEST 1 — ACCEPT A KNOWN ADMISSIBLE PAIR
 # ==================================================================================================

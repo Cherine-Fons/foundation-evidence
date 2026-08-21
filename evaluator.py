@@ -85,7 +85,6 @@ from fractions import Fraction
 
 from primitives import f_of, internal_edge_count
 
-
 # ==================================================================================================
 # density(U, F)
 # ==================================================================================================
@@ -192,4 +191,3 @@ def density(U, F):
     denominator = f_U + F_size - 1
 
     return Fraction(numerator, denominator)
-

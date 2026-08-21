@@ -38,7 +38,6 @@
 from instance import VERTICES
 from primitives import boundary, f_of
 
-
 # ==================================================================================================
 # is_admissible(U, F)
 # ==================================================================================================
@@ -201,9 +200,8 @@ def is_admissible(U, F):
         return False
 
     # Condition 4 — f(U) + |F| must be at least 3.
-    if total < 3:
+    if total < 3:  # noqa: SIM103
         return False
 
     # All four admissibility conditions hold.
     return True
-

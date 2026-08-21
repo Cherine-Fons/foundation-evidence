@@ -1,6 +1,5 @@
 import pandas as pd
 
-
 df = pd.DataFrame(
     {
         "sector": ["tech", "tech", "energy", "energy"],

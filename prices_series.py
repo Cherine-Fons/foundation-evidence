@@ -1,6 +1,5 @@
 import pandas as pd
 
-
 # Create a labeled pandas Series
 prices = pd.Series(
     [100.0, 102.0, 101.0],

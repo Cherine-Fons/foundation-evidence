@@ -1,5 +1,6 @@
 import helpers
 
+
 def test_is_admissible_even_and_ordered():
     assert helpers.is_admissible(2, 4) == True
 

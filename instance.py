@@ -313,9 +313,7 @@ def validate_instance():
         f_value = F_VALUES[v]
 
         if type(f_value) is not int or f_value <= 0:
-            raise ValueError(
-                f"f({v}) must be a positive integer, got {f_value!r}"
-            )
+            raise ValueError(f"f({v}) must be a positive integer, got {f_value!r}")
 
     # Check 4 — require f(v) <= d_G(v) at every vertex.
     degrees = compute_degrees()
@@ -353,5 +351,3 @@ def validate_instance():
 # This block is TEMPORARY.
 # We will remove it after exercising the validator.
 # ==================================================================================================
-
-

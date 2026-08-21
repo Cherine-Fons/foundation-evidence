@@ -1,6 +1,5 @@
 import numpy as np
 
-
 # Task 1 — vectorize a loop
 # Original loop:
 # prices = np.array([100.0, 102.0, 101.0, 105.0, 103.0])

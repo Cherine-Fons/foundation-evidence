@@ -28,7 +28,6 @@
 
 from instance import EDGES, F_VALUES, VERTICES
 
-
 # ==================================================================================================
 # PRIMITIVE 1 — f_of(U)
 # ==================================================================================================
@@ -327,4 +326,3 @@ def boundary(U):
             crossing_edges.append(edge_id)
 
     return crossing_edges
-

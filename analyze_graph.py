@@ -1,5 +1,5 @@
-import read_edges
 import helpers
+import read_edges
 
 good_edges, bad_rows = read_edges.parse_edge_file("edges.txt")
 degrees = helpers.count_degrees(good_edges)
