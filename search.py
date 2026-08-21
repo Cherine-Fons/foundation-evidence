@@ -130,6 +130,22 @@ class SearchResult:
 
 
 # ==================================================================================================
+# CALLER CONTRACT:
+# ==================================================================================================
+# find_max_density() assumes that the data in instance.py has already
+# passed:
+#
+#     validate_instance()
+#
+# The search does NOT repeat instance validation.
+#
+# Instance validation is an instance-lifecycle responsibility; exhaustive
+# search is a separate query responsibility.
+#
+# The test suite enforces this contract by calling validate_instance()
+# directly before the checker is considered trustworthy.
+#
+# ==================================================================================================
 # find_max_density()
 # ==================================================================================================
 #

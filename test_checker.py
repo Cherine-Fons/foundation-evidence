@@ -22,15 +22,41 @@
 # No floating-point approximation belongs in the oracle test.
 # ==================================================================================================
 
-
 from fractions import Fraction
 
 from admissibility import is_admissible
+from instance import validate_instance
 from primitives import boundary, internal_edge_count
 from search import find_max_density
 
 # ==================================================================================================
-# TEST 1 — ACCEPT A KNOWN ADMISSIBLE PAIR
+# TEST 1 — THE LOCKED INSTANCE ITSELF IS VALID
+# ==================================================================================================
+#
+# The checker assumes that instance.py satisfies all graph-level invariants.
+#
+# validate_instance() is fail-fast:
+#
+#     invalid instance -> raises ValueError
+#     valid instance   -> returns normally
+#
+# Therefore this test passes simply by reaching the end of the function
+# without an exception.
+#
+# This gives the search contract teeth:
+#
+#     find_max_density() trusts validated instance data,
+#
+# while the test suite guarantees that the locked instance actually passes
+# that validation.
+# ==================================================================================================
+
+
+def test_instance_is_valid():
+    validate_instance()
+
+# ==================================================================================================
+# TEST 2 — ACCEPT A KNOWN ADMISSIBLE PAIR
 # ==================================================================================================
 #
 # Hand-derived winner:
@@ -58,7 +84,7 @@ def test_accepts_valid_pair():
 
 
 # ==================================================================================================
-# TEST 2 — CONDITION 1: REJECT EMPTY U
+# TEST 3 — CONDITION 1: REJECT EMPTY U
 # ==================================================================================================
 #
 # U must be nonempty.
@@ -75,7 +101,7 @@ def test_rejects_empty_U():
 
 
 # ==================================================================================================
-# TEST 3 — CONDITION 2: REJECT NONBOUNDARY EDGE
+# TEST 4 — CONDITION 2: REJECT NONBOUNDARY EDGE
 # ==================================================================================================
 #
 # For:
@@ -114,7 +140,7 @@ def test_rejects_nonboundary_edge_in_F():
 
 
 # ==================================================================================================
-# TEST 4 — CONDITION 3: REJECT EVEN f(U) + |F|
+# TEST 5 — CONDITION 3: REJECT EVEN f(U) + |F|
 # ==================================================================================================
 #
 # We deliberately choose a pair where the parity condition is the
@@ -160,7 +186,7 @@ def test_rejects_even_fU_plus_F_size():
 
 
 # ==================================================================================================
-# TEST 5 — CONDITION 4: REJECT TOTAL BELOW THREE
+# TEST 6 — CONDITION 4: REJECT TOTAL BELOW THREE
 # ==================================================================================================
 #
 # Use the banked guard-isolation example:
@@ -213,7 +239,7 @@ def test_rejects_total_below_three():
 
 
 # ==================================================================================================
-# TEST 6 — PARALLEL EDGE COPIES REMAIN DISTINCT
+# TEST 7 — PARALLEL EDGE COPIES REMAIN DISTINCT
 # ==================================================================================================
 #
 # The graph contains:
@@ -255,7 +281,7 @@ def test_parallel_edge_copies_are_counted_separately():
 
 
 # ==================================================================================================
-# TEST 7 — KNOWN-ANSWER ORACLE
+# TEST 8 — KNOWN-ANSWER ORACLE
 # ==================================================================================================
 #
 # This is the central end-to-end test.
