@@ -465,3 +465,270 @@ git status
 git commit -m "f7d6: harden instance validation and document search contract"
 
 RULE TO BANK: A contract does not have to be enforced redundantly at every layer. It does need to be explicitly documented at the consumer and executable somewhere in the verification path. Here, search trusts validated data, while the test suite proves that trust is justified.
+
+======================================================================================================================================================================
+
+## F7 Week Evaluation
+
+### Pandas: basics depth closed
+
+I am comfortable calling the pandas portion of F7 complete at the **basics** level. The diagnostic gap that showed up earlier in the week is no longer there. I can now explain not just what the common operations do, but the structure they produce and why.
+
+The main ideas I can now reason through without treating pandas as syntax to memorize are:
+
+* A `Series` is one-dimensional data with a labeled index. That matters for financial data because observations belong to dates, timestamps, tickers, and other meaningful labels rather than merely occupying positions.
+* `pct_change()` computes each observation relative to the previous one, so the first result is `NaN` because there is no prior observation.
+* `.loc` is label-based and `.iloc` is position-based. Sorting can therefore change what `.iloc[2]` means while leaving `.loc["2026-07-15"]` attached to the same labeled observation.
+* Boolean filtering happens in two stages: first construct a Boolean mask, then use that mask to keep the rows marked `True`.
+* `groupby(...)[...].mean()` produces one summarized value per group, with the grouping key becoming the result's index.
+* `pivot(index=, columns=, values=)` maps one source column to row labels, one to column labels, and one to the cells of the resulting grid.
+
+I am not claiming advanced pandas proficiency yet. What closed this week was the foundational mental model: labels, positions, masks, grouping, and reshaping now make structural sense rather than feeling like unrelated API calls.
+
+---
+
+## Capstone: from manuscript definition to executable checker
+
+The F7 capstone became the first project in this curriculum where the code was built directly from mathematics I had already developed independently.
+
+The order mattered.
+
+I did **not** begin by coding the search and then try to convince myself afterward that it represented the right optimization problem. I first locked the mathematical design against my manuscript:
+
+[
+\rho_f(U,F)
+===========
+
+\frac{2(e(U)+|F|)}
+{f(U)+|F|-1},
+]
+
+with admissible pairs satisfying:
+
+1. (U\neq\varnothing) and (U\subseteq V(G)),
+2. (F\subseteq\partial_G(U)),
+3. (f(U)+|F|) is odd,
+4. (f(U)+|F|\ge3).
+
+The toy multigraph was designed deliberately rather than randomly: a parallel pair to expose multiplicity, a bridge to create controlled boundaries, and a triangle to create a meaningful competing dense set.
+
+Before trusting code, I proved the hand oracle. The intended winner was
+
+[
+U^*={0,1},
+\qquad
+F^*={e2},
+\qquad
+\rho_f(U^*,F^*)=3.
+]
+
+I then proved the domination inequality
+
+[
+e(U)\le f(U)-1
+]
+
+for every competing nonempty (U\neq{0,1}), rather than merely assuming the examples I had inspected were representative. That gave the independent conclusion that every admissible competitor has density at most (2), while the selected pair has value (3). The oracle therefore existed **before the implementation**.
+
+That distinction feels important. The program was asked to reproduce a result I had already derived, not to tell me what answer I should believe.
+
+---
+
+## Architecture
+
+The checker was separated into five core modules:
+
+* `instance.py` — fixed graph data and instance-level validation.
+* `primitives.py` — `f_of(U)`, `internal_edge_count(U)`, and `boundary(U)`.
+* `admissibility.py` — the four-condition predicate `is_admissible(U, F)`.
+* `evaluator.py` — exact evaluation of (\rho_f(U,F)).
+* `search.py` — exhaustive enumeration and maximization.
+
+The test suite sits outside those layers and now contains **8 green tests**.
+
+A few implementation decisions became especially important:
+
+* Parallel edge copies retain distinct IDs.
+* `boundary(U)` returns edge IDs in stable list order.
+* Candidate (U) and (F) are represented as `frozenset`s.
+* The full power set of a boundary is generated with `itertools.combinations` over subset sizes (0,\ldots,|\partial_G(U)|).
+* The evaluator uses `Fraction`, not floating-point division.
+* Search retains the first maximizer encountered on ties by updating only under strict `>`.
+
+The exactness choice connected directly to earlier testing lessons. In F6, floating-point finance calculations appropriately used `pytest.approx`. Here the mathematical contract itself is exact rational arithmetic, so the oracle appropriately asserts:
+
+```python
+result.value == Fraction(3, 1)
+```
+
+No tolerance belongs there.
+
+---
+
+## Testing: guards have to be caught in the act
+
+One of the strongest lessons from the build was the **guard-isolation rule**:
+
+> A test for a particular guard must use an input that passes every earlier guard, or the test has not actually proved that the intended guard works.
+
+That became concrete with admissibility condition 4. The pair
+
+[
+U={0},\qquad F=\varnothing
+]
+
+gives
+
+[
+f(U)+|F|=1.
+]
+
+It passes the nonempty-set condition, passes the boundary-subset condition, passes parity because (1) is odd, and fails only the requirement that the total be at least (3).
+
+That is a much stronger test than merely choosing an inadmissible pair and observing `False`.
+
+The same doctrine was used on `validate_instance()`: guards were deliberately broken and observed rejecting malformed data rather than being trusted merely because valid data passed.
+
+---
+
+## Edge-case hardening
+
+The hardening pass found two previously unstated invariants.
+
+### Edge endpoints must actually belong to the graph
+
+An edge such as
+
+```python
+("e5", 2, 9)
+```
+
+would previously reach `compute_degrees()` and die mechanically with a bare `KeyError: 9`.
+
+The validator now catches endpoint membership **before degree computation** and produces the actual contract violation:
+
+```text
+ValueError: edge e5 has endpoint outside VERTICES: (2, 9)
+```
+
+The ordering itself matters: validate the assumptions required by a computation before performing that computation.
+
+### Edge IDs must be unique
+
+This was the more dangerous failure.
+
+If two physical edge copies shared the same ID, `internal_edge_count()` would still count both physical entries. But `boundary()` returns IDs, and the search converts candidate (F) to a `frozenset`.
+
+Thus two different physical copies both called `"e0"` could collapse into one element:
+
+```python
+frozenset({"e0", "e0"})
+```
+
+becomes:
+
+```python
+frozenset({"e0"})
+```
+
+Then (|F|) would be wrong.
+
+Nothing necessarily crashes. The checker could simply explore the wrong mathematical search space and return a plausible-looking answer.
+
+That is exactly the failure class a validator should eliminate: **silent representation corruption**.
+
+The new `seen_edge_ids` walk therefore makes unique edge identity an explicit instance invariant.
+
+---
+
+## Validation ownership
+
+Another architectural question was whether `find_max_density()` should automatically call `validate_instance()`.
+
+I decided against duplicating the validation there.
+
+The contract is now explicit:
+
+> Instance validation is an instance-lifecycle responsibility; exhaustive search is a query responsibility.
+
+`find_max_density()` trusts that the instance has already been validated. The test suite gives that contract teeth through:
+
+```python
+def test_instance_is_valid():
+    validate_instance()
+```
+
+So a future edit that breaks the locked instance makes CI fail before the search result is trusted, while the layers remain cleanly separated.
+
+This mirrors the evaluator design: `density()` does not re-check admissibility because its caller has already established that precondition.
+
+---
+
+## Tooling lesson
+
+The linting pass also corrected an assumption I had about automated fixes.
+
+```bash
+ruff check . --fix
+```
+
+does **not** mean "fix imports." It means apply every enabled fix Ruff considers safely auto-fixable throughout the scope represented by `.`.
+
+The surprise was seeing it alter historical code in `gym.py`. The change may have been safe according to Ruff, but that did not mean I wanted an old learning exercise structurally rewritten.
+
+I restored that code.
+
+For tightly scoped work, the safer command is explicit:
+
+```bash
+ruff check instance.py primitives.py admissibility.py evaluator.py search.py test_checker.py --fix
+```
+
+The broader lesson is that a linter is a tool, not an authority. `# noqa: SIM103` in `admissibility.py` records another version of the same judgment: Ruff preferred collapsing the final admissibility guard into a Boolean return, but preserving four parallel named guards made the mathematical control flow substantially clearer.
+
+---
+
+## What still felt weak
+
+The mathematics was not the weak point this week. The places where I slowed down were mostly **software-state and control-flow discipline**.
+
+I briefly put a temporary `validate_instance()` call at the wrong indentation level, which turned what I intended as a module-level invocation into a recursive call inside the function definition. I also once carried the deliberately corrupted `(2, 9)` edge into the permanent test run instead of restoring it immediately.
+
+Interestingly, the new `test_instance_is_valid` caught that forgotten corruption. Seven earlier tests still passed. The eighth failed immediately.
+
+That was probably the best demonstration all week of why tests need to cover assumptions rather than only expected outputs.
+
+I also want more automatic fluency with:
+
+* reading nested search loops without tracing every line manually;
+* reasoning about iterator/subset enumeration;
+* deciding which layer owns a precondition;
+* spotting representation invariants before implementation exposes them;
+* distinguishing a function being **defined** from its code actually being **executed**;
+* controlling the scope of repository-wide tooling commands.
+
+None of these are conceptual blockers now, but they are not yet reflexive.
+
+---
+
+## What the mock should target
+
+The next mock should therefore spend less time asking me to reproduce syntax and more time forcing architectural reasoning.
+
+I should be asked to design a small checker from an unfamiliar specification and justify:
+
+* the data representation;
+* what belongs in validation versus query logic;
+* which failures should raise and which should return `False`;
+* where exact versus approximate arithmetic is appropriate;
+* how to enumerate a finite search space without omitting boundary cases;
+* how to construct tests that isolate individual guards;
+* what hidden invariants the chosen representation creates;
+* what happens under malformed input;
+* and whether my test suite could remain green while an important assumption is actually broken.
+
+The real F7 gain was not that I can now write `groupby`, `Fraction`, or `itertools.combinations`.
+
+It is that I am beginning to see a program as a chain of **contracts and representations**: first establish what the mathematical objects are, then decide how the program represents them, then identify what must be true for those representations to remain faithful, and finally make the tests prove those claims rather than merely exercise the happy path.
+
+> **RULE TO BANK:** The strongest checker is not the one that returns the expected answer once. It is the one whose representation, invariants, arithmetic, control flow, and tests make it difficult for the program to return a convincing wrong answer.
