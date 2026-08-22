@@ -18697,6 +18697,2413 @@ Once those match, commit the implementation and notes with the commands above.
 
 =========================================================================================================================================================
 
+Excellent. The admissibility layer is now committed cleanly:
+
+```text
+5531535  mock1: add crew-assignment admissibility predicate
+a509751  mock1: document admissibility guards and isolation tests
+working tree clean
+```
+
+We are ready for the next layer.
+
+# Step 5 — Exact Evaluator: `mock_evaluator.py`
+
+This file will be much shorter than the admissibility module, but mathematically it is one of the places where a tiny transcription mistake could make the whole checker wrong.
+
+The mock objective is:
+
+[
+value(W,S)
+==========
+
+\frac{2,i(W)+|S|}
+{skill(W)+|S|-2}.
+]
+
+There are **four things we must preserve exactly**:
+
+```text
+1. internal shifts i(W) are multiplied by 2
+2. |S| is added only once in the numerator
+3. denominator subtracts 2
+4. arithmetic is exact rational arithmetic
+```
+
+The most dangerous pattern-replay error would be copying your F7 capstone formula:
+
+[
+2(i(W)+|S|),
+]
+
+which would incorrectly double (|S|).
+
+---
+
+## 1. Create the File
+
+First, because we just committed everything, confirm:
+
+```bash
+git status
+```
+
+Prediction:
+
+```text
+nothing to commit, working tree clean
+```
+
+Now create:
+
+```bash
+code mock_evaluator.py
+```
+
+Confirm:
+
+```bash
+ls mock_evaluator.py
+```
+
+Expected:
+
+```text
+mock_evaluator.py
+```
+
+Do not commit yet.
+
+---
+
+# 2. What Is the Evaluator's Job?
+
+We already have:
+
+```text
+mock_admissibility.py
+→ decides whether (W,S) is allowed to compete
+```
+
+The evaluator has a narrower job:
+
+> Given a candidate that has already been established as admissible, compute its exact objective value.
+
+So our architecture becomes:
+
+```text
+candidate (W,S)
+       ↓
+is_admissible(W,S)
+       ↓
+     True?
+       ↓
+candidate_value(W,S)
+       ↓
+exact Fraction
+```
+
+The evaluator does **not** decide whether the pair should participate.
+
+It calculates the objective.
+
+---
+
+# 3. Should the Evaluator Call `is_admissible()` Again?
+
+I would say **no**.
+
+This is the same layering decision we made in the F7 capstone.
+
+The future search loop will have the shape:
+
+```python
+if not is_admissible(W, S):
+    continue
+
+value = candidate_value(W, S)
+```
+
+At that point the pair has just passed all four admissibility conditions.
+
+If `candidate_value()` then called `is_admissible()` again, we would repeat:
+
+* crew validation;
+* fringe computation;
+* subset checking;
+* skill computation;
+* parity checking;
+* lower-bound checking.
+
+That is redundant.
+
+More importantly, it blurs responsibilities.
+
+A cleaner contract is:
+
+```text
+is_admissible(W,S)
+    answers:
+    "May this candidate compete?"
+
+candidate_value(W,S)
+    answers:
+    "What is its exact value?"
+```
+
+So the evaluator **trusts its caller**.
+
+---
+
+# 4. What Does That Trust Mean?
+
+It means this is valid usage:
+
+```python
+if is_admissible(W, S):
+    value = candidate_value(W, S)
+```
+
+But calling:
+
+```python
+candidate_value(W, S)
+```
+
+on an inadmissible pair violates the function's contract.
+
+For example, consider:
+
+[
+W={a,b},
+\qquad
+S=\varnothing.
+]
+
+We know:
+
+[
+skill(W)=2.
+]
+
+The denominator would be:
+
+[
+2+0-2=0.
+]
+
+So:
+
+```python
+Fraction(numerator, 0)
+```
+
+would raise:
+
+```text
+ZeroDivisionError
+```
+
+That is acceptable under our contract because this pair should never have reached the evaluator: it fails admissibility Condition 4.
+
+The important architecture is:
+
+```text
+admissibility
+→ establishes denominator safety
+
+evaluator
+→ trusts that precondition
+```
+
+---
+
+# 5. Why Condition 4 Makes the Evaluator Safe
+
+Condition 4 says:
+
+[
+skill(W)+|S|\ge4.
+]
+
+The evaluator's denominator is:
+
+[
+skill(W)+|S|-2.
+]
+
+Subtract 2 from both sides:
+
+[
+skill(W)+|S|-2\ge2.
+]
+
+Therefore every admissible pair has denominator at least:
+
+[
+2.
+]
+
+So:
+
+```text
+admissible pair
+→ denominator >= 2
+→ denominator cannot be zero
+→ exact Fraction construction is safe
+```
+
+This is a good example of one layer establishing a precondition for another.
+
+---
+
+# 6. Why We Use `Fraction`
+
+We import:
+
+```python
+from fractions import Fraction
+```
+
+This is standard library, so it satisfies the mock's:
+
+```text
+stdlib + pytest only
+```
+
+rule.
+
+Why not simply:
+
+```python
+numerator / denominator
+```
+
+?
+
+Because `/` gives a Python `float`.
+
+For example:
+
+[
+\frac32
+]
+
+happens to display nicely as:
+
+```text
+1.5
+```
+
+but another legitimate mock value is:
+
+[
+\frac56.
+]
+
+Python float division gives an approximation:
+
+```python
+5 / 6
+```
+
+approximately:
+
+```text
+0.8333333333333334
+```
+
+But mathematically the value is exactly:
+
+[
+\frac56.
+]
+
+The checker is an **exact verifier**.
+
+So we want:
+
+```python
+Fraction(5, 6)
+```
+
+which stores the rational value exactly.
+
+That gives us exact comparison later:
+
+```python
+Fraction(3, 1) > Fraction(2, 1)
+```
+
+and exact known-answer tests:
+
+```python
+assert result.value == Fraction(3, 1)
+```
+
+No tolerance is needed.
+
+---
+
+# 7. Never Turn It Into a Float First
+
+Correct:
+
+```python
+return Fraction(numerator, denominator)
+```
+
+Wrong:
+
+```python
+return Fraction(numerator / denominator)
+```
+
+Why?
+
+Because:
+
+```python
+numerator / denominator
+```
+
+already creates a float.
+
+At that point exactness has been lost before `Fraction` even sees the number.
+
+The correct pipeline is:
+
+```text
+integer numerator
+integer denominator
+        ↓
+Fraction(numerator, denominator)
+        ↓
+exact rational
+```
+
+not:
+
+```text
+integers
+  ↓
+float approximation
+  ↓
+Fraction(float)
+```
+
+---
+
+# 8. Translate the Formula Into Variables
+
+The mathematical formula is:
+
+[
+\frac{2i(W)+|S|}
+{skill(W)+|S|-2}.
+]
+
+We can make each mathematical piece visible:
+
+```python
+internal_count = internal_shift_count(W)
+crew_skill = skill_of(W)
+S_size = len(S)
+```
+
+Then:
+
+```python
+numerator = 2 * internal_count + S_size
+```
+
+and:
+
+```python
+denominator = crew_skill + S_size - 2
+```
+
+Finally:
+
+```python
+return Fraction(numerator, denominator)
+```
+
+This is intentionally more explicit than compressing everything into one line.
+
+The code should look structurally like the mathematics.
+
+---
+
+# 9. The Most Important Formula Trap
+
+Compare carefully.
+
+## Correct mock formula
+
+```python
+numerator = 2 * internal_count + S_size
+```
+
+This means:
+
+[
+2i(W)+|S|.
+]
+
+## Wrong capstone-pattern formula
+
+```python
+numerator = 2 * (internal_count + S_size)
+```
+
+This means:
+
+[
+2i(W)+2|S|.
+]
+
+Those are different whenever:
+
+[
+|S|>0.
+]
+
+So we need at least one prediction where (S\neq\varnothing), otherwise a mistaken implementation could accidentally pass.
+
+That is important test design.
+
+For the winner:
+
+[
+S=\varnothing,
+]
+
+both formulas happen to give the same numerator:
+
+```text
+correct:
+2*3 + 0 = 6
+
+wrong:
+2*(3+0) = 6
+```
+
+So testing only the winner would **not detect the formula bug**.
+
+We need nonempty-(S) examples too.
+
+---
+
+# 10. Predictions Before Code
+
+We will use several hand-derived cases.
+
+## Prediction 1 — Oracle Winner
+
+[
+W={a,b,c},
+\qquad
+S=\varnothing.
+]
+
+We already know:
+
+[
+i(W)=3,
+]
+
+[
+skill(W)=4,
+]
+
+[
+|S|=0.
+]
+
+Numerator:
+
+[
+2(3)+0=6.
+]
+
+Denominator:
+
+[
+4+0-2=2.
+]
+
+Therefore:
+
+[
+value=3.
+]
+
+Prediction:
+
+```python
+candidate_value(
+    frozenset({"a", "b", "c"}),
+    frozenset(),
+)
+```
+
+returns:
+
+```python
+Fraction(3, 1)
+```
+
+When printed, Python normally displays:
+
+```text
+3
+```
+
+because `Fraction.__str__` prints whole-number fractions as the integer-looking value.
+
+If we use `repr(...)`, we would see:
+
+```text
+Fraction(3, 1)
+```
+
+---
+
+# 11. Prediction 2 — Singleton `{b}` With Full Fringe
+
+Use:
+
+[
+W={b},
+]
+
+[
+S={s0,s1,s2}.
+]
+
+We know:
+
+[
+i(W)=0,
+]
+
+[
+skill(W)=1,
+]
+
+[
+|S|=3.
+]
+
+Numerator:
+
+[
+2(0)+3=3.
+]
+
+Denominator:
+
+[
+1+3-2=2.
+]
+
+Thus:
+
+[
+value=\frac32.
+]
+
+Prediction:
+
+```python
+Fraction(3, 2)
+```
+
+This is an important nonempty-(S) test.
+
+If we accidentally wrote the capstone-style numerator:
+
+[
+2(0+3)=6,
+]
+
+we would get:
+
+[
+\frac62=3,
+]
+
+which is wildly wrong.
+
+So this case will catch that mistake immediately.
+
+---
+
+# 12. Prediction 3 — `{b,c}` With One Selected Fringe Shift
+
+Use:
+
+[
+W={b,c},
+]
+
+[
+S={s0}.
+]
+
+From the oracle:
+
+[
+i(W)=1,
+]
+
+[
+skill(W)=3,
+]
+
+[
+|S|=1.
+]
+
+Numerator:
+
+[
+2(1)+1=3.
+]
+
+Denominator:
+
+[
+3+1-2=2.
+]
+
+Therefore:
+
+[
+value=\frac32.
+]
+
+Prediction:
+
+```python
+Fraction(3, 2)
+```
+
+Again, wrong capstone-pattern arithmetic would give:
+
+[
+2(1+1)=4,
+]
+
+yielding:
+
+[
+2,
+]
+
+so this also detects formula replay.
+
+---
+
+# 13. Prediction 4 — `{a,b,d}` With Empty `S`
+
+Use:
+
+[
+W={a,b,d},
+\qquad
+S=\varnothing.
+]
+
+We know:
+
+[
+i(W)=2,
+]
+
+[
+skill(W)=4.
+]
+
+Numerator:
+
+[
+2(2)=4.
+]
+
+Denominator:
+
+[
+4-2=2.
+]
+
+Thus:
+
+[
+value=2.
+]
+
+Prediction:
+
+```python
+Fraction(2, 1)
+```
+
+This is one of the actual runner-up values.
+
+---
+
+# 14. Prediction 5 — Exact Nonterminating Rational Case
+
+This is the one that most clearly justifies `Fraction`.
+
+Take:
+
+[
+W={a,c,d},
+]
+
+and select the full fringe:
+
+[
+S={s0,s1,s2}.
+]
+
+We derived:
+
+[
+i(W)=1,
+]
+
+[
+skill(W)=5,
+]
+
+[
+|S|=3.
+]
+
+Numerator:
+
+[
+2(1)+3=5.
+]
+
+Denominator:
+
+[
+5+3-2=6.
+]
+
+Therefore:
+
+[
+value=\frac56.
+]
+
+Prediction:
+
+```python
+Fraction(5, 6)
+```
+
+This is especially useful because float division would produce an approximation.
+
+---
+
+# 15. Why We Don't Need `fringe()` Here
+
+Notice the evaluator imports:
+
+```text
+skill_of
+internal_shift_count
+```
+
+but not:
+
+```text
+fringe
+```
+
+Why?
+
+Because the evaluator trusts that (S) has already passed admissibility.
+
+It does not need to verify again that:
+
+[
+S\subseteq\partial(W).
+]
+
+It only needs:
+
+[
+|S|.
+]
+
+So the evaluator's dependencies match its responsibility.
+
+---
+
+# 16. Create the File
+
+Paste the complete file at the end of this response into:
+
+```text
+mock_evaluator.py
+```
+
+Save it.
+
+Then run the predictions using `repr()` so we can see the exact `Fraction` representation.
+
+### Winner
+
+```bash
+python -c 'from mock_evaluator import candidate_value; print(repr(candidate_value(frozenset({"a","b","c"}), frozenset())))'
+```
+
+Expected:
+
+```text
+Fraction(3, 1)
+```
+
+### Singleton `{b}` full fringe
+
+```bash
+python -c 'from mock_evaluator import candidate_value; print(repr(candidate_value(frozenset({"b"}), frozenset({"s0","s1","s2"}))))'
+```
+
+Expected:
+
+```text
+Fraction(3, 2)
+```
+
+### `{b,c}` with `s0`
+
+```bash
+python -c 'from mock_evaluator import candidate_value; print(repr(candidate_value(frozenset({"b","c"}), frozenset({"s0"}))))'
+```
+
+Expected:
+
+```text
+Fraction(3, 2)
+```
+
+### `{a,b,d}`, empty `S`
+
+```bash
+python -c 'from mock_evaluator import candidate_value; print(repr(candidate_value(frozenset({"a","b","d"}), frozenset())))'
+```
+
+Expected:
+
+```text
+Fraction(2, 1)
+```
+
+### `{a,c,d}`, full fringe
+
+```bash
+python -c 'from mock_evaluator import candidate_value; print(repr(candidate_value(frozenset({"a","c","d"}), frozenset({"s0","s1","s2"}))))'
+```
+
+Expected:
+
+```text
+Fraction(5, 6)
+```
+
+The predicted sequence is:
+
+```text
+Fraction(3, 1)
+Fraction(3, 2)
+Fraction(3, 2)
+Fraction(2, 1)
+Fraction(5, 6)
+```
+
+Do not commit yet. Once these match, we will deliberately inspect the denominator-contract behavior, run Ruff, confirm module silence, and commit the evaluator.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Step 5 — Exact Objective Evaluator
+
+The next implementation layer is:
+
+```text
+mock_evaluator.py
+````
+
+Its responsibility is narrower than admissibility.
+
+The architecture is:
+
+```text
+candidate (W,S)
+       ↓
+is_admissible(W,S)
+       ↓
+if True
+       ↓
+candidate_value(W,S)
+       ↓
+exact rational objective
+```
+
+The evaluator answers:
+
+> What is the exact objective value of this already-admissible candidate?
+
+It does not answer:
+
+> Is this candidate allowed to compete?
+
+That responsibility belongs to `is_admissible()`.
+
+---
+
+## Evaluator Contract
+
+`candidate_value(W, S)` trusts that the caller has already established admissibility.
+
+The future search loop will therefore have the form:
+
+```python
+if not is_admissible(W, S):
+    continue
+
+value = candidate_value(W, S)
+```
+
+The evaluator does not repeat:
+
+* crew validity,
+* fringe-subset checking,
+* parity,
+* lower-bound checking.
+
+This preserves separation of responsibilities and avoids redundant work.
+
+---
+
+## Why Admissibility Protects the Denominator
+
+The mock objective denominator is:
+
+[
+skill(W)+|S|-2.
+]
+
+Admissibility Condition 4 requires:
+
+[
+skill(W)+|S|\ge4.
+]
+
+Therefore:
+
+[
+skill(W)+|S|-2\ge2.
+]
+
+Thus every admissible candidate has a denominator at least 2.
+
+So:
+
+```text
+admissibility
+→ establishes denominator safety
+
+evaluator
+→ trusts that precondition
+```
+
+If a caller deliberately violates the evaluator contract and supplies an inadmissible pair with denominator zero, `Fraction` may raise `ZeroDivisionError`.
+
+That is acceptable because such a pair should never reach the evaluator in the intended search architecture.
+
+---
+
+## Exact Arithmetic With Fraction
+
+The objective is:
+
+[
+value(W,S)
+==========
+
+\frac{2i(W)+|S|}
+{skill(W)+|S|-2}.
+]
+
+All quantities used to construct the numerator and denominator are integers.
+
+The mathematically natural representation is therefore an exact rational.
+
+Use:
+
+```python
+from fractions import Fraction
+```
+
+and construct:
+
+```python
+Fraction(numerator, denominator)
+```
+
+Do not use ordinary `/` first.
+
+Correct:
+
+```python
+Fraction(5, 6)
+```
+
+Wrong exactness pipeline:
+
+```python
+Fraction(5 / 6)
+```
+
+because:
+
+```python
+5 / 6
+```
+
+creates a floating-point approximation before `Fraction` sees the value.
+
+The correct pipeline is:
+
+```text
+integer numerator
+integer denominator
+        ↓
+Fraction(numerator, denominator)
+        ↓
+exact rational
+```
+
+---
+
+## The Mock Formula Must Be Transcribed Exactly
+
+The numerator is:
+
+[
+2i(W)+|S|.
+]
+
+Python:
+
+```python
+numerator = 2 * internal_count + S_size
+```
+
+It is NOT:
+
+```python
+numerator = 2 * (internal_count + S_size)
+```
+
+The wrong expression would compute:
+
+[
+2i(W)+2|S|.
+]
+
+That is the F7-capstone-shaped formula, not the mock formula.
+
+Only internal shifts receive coefficient 2.
+
+Selected fringe shifts receive coefficient 1.
+
+The denominator is:
+
+```python
+denominator = crew_skill + S_size - 2
+```
+
+not the capstone's subtraction by 1.
+
+---
+
+## Why the Winner Alone Cannot Detect Formula Replay
+
+The oracle winner is:
+
+```text
+W = {a,b,c}
+S = ∅
+```
+
+Since:
+
+```text
+|S| = 0
+```
+
+both formulas:
+
+```text
+2*i(W) + |S|
+```
+
+and:
+
+```text
+2*(i(W) + |S|)
+```
+
+happen to produce the same number.
+
+For:
+
+```text
+i(W) = 3
+```
+
+both give:
+
+```text
+6
+```
+
+Therefore testing only the winner would not prove that the mock numerator was implemented correctly.
+
+A robust evaluator check must include admissible pairs with:
+
+```text
+|S| > 0
+```
+
+because those distinguish the two formulas.
+
+---
+
+## Hand-Derived Predictions
+
+### Oracle winner
+
+```text
+W = {a,b,c}
+S = ∅
+```
+
+From the oracle:
+
+```text
+i(W) = 3
+skill(W) = 4
+|S| = 0
+```
+
+Therefore:
+
+```text
+numerator
+= 2*3 + 0
+= 6
+
+denominator
+= 4 + 0 - 2
+= 2
+
+value
+= 6/2
+= 3
+```
+
+Expected exact Python value:
+
+```python
+Fraction(3, 1)
+```
+
+---
+
+### Singleton `{b}` with full fringe
+
+```text
+W = {b}
+S = {s0,s1,s2}
+```
+
+From the oracle:
+
+```text
+i(W) = 0
+skill(W) = 1
+|S| = 3
+```
+
+Correct mock numerator:
+
+```text
+2*0 + 3 = 3
+```
+
+Denominator:
+
+```text
+1 + 3 - 2 = 2
+```
+
+Therefore:
+
+```text
+value = 3/2
+```
+
+Expected:
+
+```python
+Fraction(3, 2)
+```
+
+This case strongly detects formula replay.
+
+If the old capstone-shaped numerator were used:
+
+```text
+2*(0 + 3) = 6
+```
+
+the incorrect value would be:
+
+```text
+6/2 = 3
+```
+
+instead of:
+
+```text
+3/2
+```
+
+---
+
+### Crew `{b,c}` with one fringe shift
+
+```text
+W = {b,c}
+S = {s0}
+```
+
+Hand-derived values:
+
+```text
+i(W) = 1
+skill(W) = 3
+|S| = 1
+```
+
+Therefore:
+
+```text
+numerator
+= 2*1 + 1
+= 3
+
+denominator
+= 3 + 1 - 2
+= 2
+
+value
+= 3/2
+```
+
+Expected:
+
+```python
+Fraction(3, 2)
+```
+
+The incorrect old-pattern numerator would produce:
+
+```text
+2*(1+1) = 4
+```
+
+and therefore the wrong value:
+
+```text
+2
+```
+
+So this is another useful new-vs-old formula diagnostic.
+
+---
+
+### Runner-up crew `{a,b,d}`
+
+```text
+W = {a,b,d}
+S = ∅
+```
+
+Then:
+
+```text
+i(W) = 2
+skill(W) = 4
+|S| = 0
+```
+
+Therefore:
+
+```text
+numerator = 4
+denominator = 2
+value = 2
+```
+
+Expected:
+
+```python
+Fraction(2, 1)
+```
+
+---
+
+### Exact nonterminating rational case
+
+Use:
+
+```text
+W = {a,c,d}
+S = {s0,s1,s2}
+```
+
+Then:
+
+```text
+i(W) = 1
+skill(W) = 5
+|S| = 3
+```
+
+Therefore:
+
+```text
+numerator
+= 2*1 + 3
+= 5
+
+denominator
+= 5 + 3 - 2
+= 6
+
+value
+= 5/6
+```
+
+Expected:
+
+```python
+Fraction(5, 6)
+```
+
+A float would approximate this value.
+
+`Fraction(5, 6)` preserves it exactly.
+
+---
+
+## Evaluator Dependencies
+
+The evaluator needs:
+
+```text
+skill_of(W)
+internal_shift_count(W)
+```
+
+It does not need:
+
+```text
+fringe(W)
+```
+
+because admissibility has already established that the supplied `S` is legal.
+
+The evaluator only needs:
+
+```text
+|S|
+```
+
+from the selected fringe set.
+
+This keeps the dependency structure aligned with the function's responsibility.
+
+---
+
+> **RULE TO BANK:** Exact verification requires exact arithmetic from construction onward. Translate the current formula literally, test it on cases where the new formula differs from the old one, and never convert to float before building a `Fraction`.
+
+````
+
+# COPY INTO `mock_evaluator.py`
+
+```python
+# ==================================================================================================
+# MOCK EXIT 1 — EXACT OBJECTIVE EVALUATOR
+# ==================================================================================================
+#
+# PURPOSE:
+#
+# Evaluate the Crew-Assignment Density objective exactly:
+#
+#                         2*i(W) + |S|
+#     value(W, S) = ---------------------------
+#                      skill(W) + |S| - 2
+#
+# for a candidate pair:
+#
+#     (W, S)
+#
+#
+# EXACTNESS CONTRACT:
+#
+# The objective is rational.
+#
+# This module therefore uses:
+#
+#     fractions.Fraction
+#
+# and constructs the result directly from an integer numerator and
+# integer denominator.
+#
+#
+# DO NOT:
+#
+#     numerator / denominator
+#
+# before constructing the Fraction.
+#
+# Ordinary `/` creates a float and therefore introduces approximation
+# before exact rational construction.
+#
+#
+# RESPONSIBILITY BOUNDARY:
+#
+# is_admissible(W, S)
+#
+#     decides whether a candidate may participate in the optimization.
+#
+# candidate_value(W, S)
+#
+#     computes the exact objective value of a candidate that the caller
+#     has already established as admissible.
+#
+#
+# candidate_value() does NOT call is_admissible() again.
+#
+# Its caller contract is:
+#
+#     supply an admissible candidate pair.
+#
+#
+# DENOMINATOR SAFETY:
+#
+# Admissibility Condition 4 guarantees:
+#
+#     skill(W) + |S| >= 4
+#
+# Therefore:
+#
+#     skill(W) + |S| - 2 >= 2
+#
+# so every admissible pair has a positive nonzero denominator.
+#
+#
+# IMPORTANT MOCK-SPECIFICATION WARNING:
+#
+# The numerator is:
+#
+#     2*i(W) + |S|
+#
+# NOT:
+#
+#     2*(i(W) + |S|)
+#
+# Only internal shifts are doubled.
+#
+# Selected fringe shifts contribute coefficient 1.
+#
+# The denominator subtracts:
+#
+#     2
+#
+# not:
+#
+#     1
+#
+# ==================================================================================================
+
+
+from fractions import Fraction
+
+from mock_primitives import internal_shift_count, skill_of
+
+
+# ==================================================================================================
+# candidate_value(W, S)
+# ==================================================================================================
+#
+# COMMENTS-FIRST ALGORITHM:
+#
+# 1. Compute:
+#
+#        internal_count = i(W)
+#
+#
+# 2. Compute:
+#
+#        crew_skill = skill(W)
+#
+#
+# 3. Compute:
+#
+#        S_size = |S|
+#
+#
+# 4. Build the numerator exactly as specified:
+#
+#        numerator = 2 * internal_count + S_size
+#
+#
+# 5. Build the denominator exactly as specified:
+#
+#        denominator = crew_skill + S_size - 2
+#
+#
+# 6. Return:
+#
+#        Fraction(numerator, denominator)
+#
+#
+# ==================================================================================================
+# HAND-DERIVED PREDICTIONS
+# ==================================================================================================
+#
+# ORACLE WINNER:
+#
+#     W = {"a", "b", "c"}
+#     S = empty
+#
+#     internal_count = 3
+#     crew_skill = 4
+#     S_size = 0
+#
+#     numerator = 2*3 + 0 = 6
+#     denominator = 4 + 0 - 2 = 2
+#
+#     value = Fraction(6, 2)
+#           = Fraction(3, 1)
+#
+#
+# SINGLETON b WITH FULL FRINGE:
+#
+#     W = {"b"}
+#     S = {"s0", "s1", "s2"}
+#
+#     internal_count = 0
+#     crew_skill = 1
+#     S_size = 3
+#
+#     numerator = 2*0 + 3 = 3
+#     denominator = 1 + 3 - 2 = 2
+#
+#     value = Fraction(3, 2)
+#
+# This case detects the incorrect capstone-shaped numerator:
+#
+#     2*(internal_count + S_size)
+#
+# which would incorrectly produce:
+#
+#     2*(0+3) = 6
+#
+#
+# CREW {"b", "c"} WITH S={"s0"}:
+#
+#     internal_count = 1
+#     crew_skill = 3
+#     S_size = 1
+#
+#     numerator = 2*1 + 1 = 3
+#     denominator = 3 + 1 - 2 = 2
+#
+#     value = Fraction(3, 2)
+#
+#
+# RUNNER-UP CREW:
+#
+#     W = {"a", "b", "d"}
+#     S = empty
+#
+#     internal_count = 2
+#     crew_skill = 4
+#     S_size = 0
+#
+#     numerator = 4
+#     denominator = 2
+#
+#     value = Fraction(2, 1)
+#
+#
+# NONTERMINATING-DECIMAL RATIONAL:
+#
+#     W = {"a", "c", "d"}
+#     S = {"s0", "s1", "s2"}
+#
+#     internal_count = 1
+#     crew_skill = 5
+#     S_size = 3
+#
+#     numerator = 2*1 + 3 = 5
+#     denominator = 5 + 3 - 2 = 6
+#
+#     value = Fraction(5, 6)
+#
+# Exact Fraction arithmetic preserves:
+#
+#     5/6
+#
+# rather than approximating it as a float.
+#
+# ==================================================================================================
+
+
+def candidate_value(W, S):
+    internal_count = internal_shift_count(W)
+    crew_skill = skill_of(W)
+    S_size = len(S)
+
+    numerator = 2 * internal_count + S_size
+    denominator = crew_skill + S_size - 2
+
+    return Fraction(numerator, denominator)
+````
+
+Run the five prediction commands now and paste the outputs.
+
+============================================================================================================================================================
+
+Perfect. All five evaluator predictions matched **exactly**:
+
+```text
+winner                    → Fraction(3, 1) ✓
+{b} with full fringe      → Fraction(3, 2) ✓
+{b,c} with {s0}           → Fraction(3, 2) ✓
+{a,b,d} with empty S      → Fraction(2, 1) ✓
+{a,c,d} with full fringe  → Fraction(5, 6) ✓
+```
+
+That last result is especially important: `Fraction(5, 6)` proves we stayed in exact rational arithmetic rather than drifting into float approximation.
+
+Now we close the evaluator layer properly.
+
+# Step 5B — Prove the Evaluator Contract
+
+Remember the contract we deliberately chose:
+
+> `candidate_value(W, S)` **trusts the caller to supply an admissible pair**.
+
+So now we intentionally violate that contract once to understand what happens.
+
+Use:
+
+[
+W={a,b},\qquad S=\varnothing.
+]
+
+From the oracle:
+
+[
+skill({a,b})=2.
+]
+
+Therefore the denominator would be:
+
+[
+skill(W)+|S|-2
+==============
+
+# 2+0-2
+
+0.
+
+]
+
+The numerator would be:
+
+[
+2i(W)+|S|
+=========
+
+# 2(2)+0
+
+4.
+
+]
+
+So the evaluator would attempt:
+
+[
+\frac40.
+]
+
+That is undefined.
+
+Because we construct:
+
+```python
+Fraction(4, 0)
+```
+
+Python should raise:
+
+```text
+ZeroDivisionError
+```
+
+This is **not evidence that the evaluator is broken**.
+
+It is evidence that its precondition matters.
+
+The intended architecture prevents this candidate from ever reaching the evaluator:
+
+```text
+(W,S) = ({a,b}, ∅)
+        ↓
+is_admissible(...)
+        ↓
+Condition 4 fails because total = 2 < 4
+        ↓
+False
+        ↓
+search skips candidate
+        ↓
+candidate_value() never called
+```
+
+So the search architecture makes the denominator safe by construction.
+
+---
+
+## Predict Before Running
+
+Run:
+
+```bash
+python -c 'from mock_evaluator import candidate_value; candidate_value(frozenset({"a","b"}), frozenset())'
+```
+
+Expected last traceback line should be some `ZeroDivisionError` from `Fraction`. The precise stdlib wording can vary, so the important prediction is the exception **type**:
+
+```text
+ZeroDivisionError
+```
+
+We are not testing a validator message here. We are deliberately violating an internal caller contract.
+
+---
+
+# Step 5C — Why We Do NOT Add a Denominator Guard
+
+You might reasonably ask why we do not write:
+
+```python
+if denominator == 0:
+    raise ValueError(...)
+```
+
+We could.
+
+But that would duplicate part of the admissibility contract.
+
+The specification already gives us:
+
+[
+skill(W)+|S|\ge4,
+]
+
+which implies:
+
+[
+denominator\ge2.
+]
+
+So for every candidate the evaluator is legitimately supposed to receive, zero is impossible.
+
+Adding another guard would not make the mathematics more correct. It would change the function from:
+
+```text
+exact arithmetic on admissible candidates
+```
+
+toward:
+
+```text
+arithmetic + partial admissibility validation
+```
+
+and we deliberately chose not to mix those layers.
+
+This is the same reasoning you used earlier:
+
+```text
+density()
+does not repeat is_admissible()
+
+search()
+does not own instance validation
+```
+
+A precondition can be enforced at one architectural boundary and trusted afterward.
+
+---
+
+# Step 5D — Confirm Module Silence
+
+Run:
+
+```bash
+python mock_evaluator.py
+```
+
+Prediction:
+
+**no output**.
+
+The module contains only:
+
+```text
+imports
+function definition
+```
+
+No top-level demonstration or calculation belongs there.
+
+---
+
+# Step 5E — Ruff
+
+Run:
+
+```bash
+ruff check mock_evaluator.py
+```
+
+We have seen Ruff repeatedly prefer its canonical import formatting, so an `I001` finding would not be surprising.
+
+If you get:
+
+```text
+I001 [*]
+```
+
+then use only:
+
+```bash
+ruff check mock_evaluator.py --fix
+```
+
+and immediately:
+
+```bash
+ruff check mock_evaluator.py
+```
+
+We want:
+
+```text
+All checks passed!
+```
+
+Again, scope matters:
+
+```text
+mock_evaluator.py
+```
+
+only.
+
+---
+
+# Step 5F — Re-Prove the Most Diagnostic Case After Ruff
+
+If Ruff rewrites the file, rerun the test that best distinguishes this mock's formula from the capstone formula:
+
+```bash
+python -c 'from mock_evaluator import candidate_value; print(repr(candidate_value(frozenset({"b"}), frozenset({"s0","s1","s2"}))))'
+```
+
+We want:
+
+```text
+Fraction(3, 2)
+```
+
+Why this one?
+
+Because the correct mock numerator gives:
+
+[
+2(0)+3=3,
+]
+
+whereas the wrong capstone-pattern numerator would give:
+
+[
+2(0+3)=6.
+]
+
+So:
+
+```text
+Fraction(3, 2)
+```
+
+is strong evidence that the current specification is actually encoded.
+
+---
+
+# Step 5G — Commit the Evaluator
+
+Once you have:
+
+```text
+inadmissible denominator example → ZeroDivisionError
+module direct run                → silent
+Ruff                             → clean
+diagnostic value                 → Fraction(3, 2)
+```
+
+run:
+
+```bash
+git status
+```
+
+You should expect something like:
+
+```text
+modified:   mock_notes_1.md
+untracked:  mock_evaluator.py
+```
+
+Stage the implementation only:
+
+```bash
+git add mock_evaluator.py
+```
+
+Check:
+
+```bash
+git status
+```
+
+Then commit:
+
+```bash
+git commit -m "mock1: add exact crew-assignment evaluator"
+```
+
+Then commit the notes separately:
+
+```bash
+git add mock_notes_1.md
+git commit -m "mock1: document exact evaluator and caller contract"
+```
+
+Finally:
+
+```bash
+git status
+```
+
+Expected:
+
+```text
+nothing to commit, working tree clean
+```
+
+After that, we reach the biggest remaining implementation step:
+
+```text
+mock_search.py
+```
+
+That is where we combine everything:
+
+```text
+enumerate every nonempty W
+        ↓
+compute fringe(W) once
+        ↓
+enumerate every S ⊆ fringe(W)
+        ↓
+is_admissible(W,S)
+        ↓
+candidate_value(W,S)
+        ↓
+retain best exact result
+```
+
+We will build the search slowly because it contains several distinct ideas: power-set enumeration, deterministic ordering, a frozen result record, the `None` sentinel, first-on-tie behavior, and the empty-admissible-family result.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Step 5B — Evaluator Contract and Denominator Safety
+
+All five hand-derived evaluator predictions matched exactly.
+
+Observed values:
+
+```text
+W = {a,b,c}, S = ∅
+→ Fraction(3, 1)
+
+W = {b}, S = {s0,s1,s2}
+→ Fraction(3, 2)
+
+W = {b,c}, S = {s0}
+→ Fraction(3, 2)
+
+W = {a,b,d}, S = ∅
+→ Fraction(2, 1)
+
+W = {a,c,d}, S = {s0,s1,s2}
+→ Fraction(5, 6)
+````
+
+These results establish several things simultaneously:
+
+* the numerator doubles only the internal-shift count;
+* selected fringe shifts contribute coefficient 1;
+* the denominator subtracts 2;
+* the evaluator returns exact `Fraction` objects;
+* nonterminating rational values such as `5/6` remain exact.
+
+---
+
+### Evaluator Caller Contract
+
+`candidate_value(W, S)` does not re-check admissibility.
+
+Its contract is:
+
+> The caller must supply a candidate that has already passed `is_admissible(W, S)`.
+
+The intended search structure is:
+
+```python
+if not is_admissible(W, S):
+    continue
+
+value = candidate_value(W, S)
+```
+
+This preserves responsibility separation:
+
+```text
+is_admissible()
+    decides whether the candidate may compete
+
+candidate_value()
+    computes the candidate's exact objective
+```
+
+---
+
+### Why Admissibility Guarantees Denominator Safety
+
+The objective denominator is:
+
+[
+skill(W)+|S|-2.
+]
+
+Condition 4 requires:
+
+[
+skill(W)+|S|\ge4.
+]
+
+Therefore every admissible candidate satisfies:
+
+[
+skill(W)+|S|-2\ge2.
+]
+
+Hence:
+
+```text
+admissible candidate
+→ denominator >= 2
+→ denominator cannot be zero
+```
+
+The evaluator can therefore trust denominator safety when its caller respects the contract.
+
+---
+
+### Deliberate Contract Violation
+
+Consider:
+
+```text
+W = {a,b}
+S = ∅
+```
+
+From the oracle:
+
+```text
+skill(W) = 2
+i(W) = 2
+```
+
+Then:
+
+```text
+numerator
+= 2*2 + 0
+= 4
+
+denominator
+= 2 + 0 - 2
+= 0
+```
+
+So direct evaluation would attempt:
+
+```text
+4/0
+```
+
+and `Fraction` should raise:
+
+```text
+ZeroDivisionError
+```
+
+This is not an evaluator bug.
+
+The pair is inadmissible because:
+
+```text
+skill(W) + |S|
+= 2
+< 4
+```
+
+and therefore should never reach the evaluator through the intended search path.
+
+The architecture is:
+
+```text
+({a,b}, ∅)
+    ↓
+is_admissible()
+    ↓
+Condition 4 fails
+    ↓
+False
+    ↓
+search continues
+    ↓
+candidate_value() never called
+```
+
+---
+
+### Why No Extra Denominator Guard Is Added
+
+The evaluator could explicitly check:
+
+```python
+if denominator == 0:
+    ...
+```
+
+but that would duplicate a guarantee already established by admissibility.
+
+The chosen architecture treats denominator positivity as a precondition established by the previous layer.
+
+This follows the broader contract principle:
+
+> A condition does not have to be redundantly enforced in every downstream function when one architectural boundary establishes it and later layers explicitly trust it.
+
+---
+
+### Exact Arithmetic Evidence
+
+The value:
+
+```python
+Fraction(5, 6)
+```
+
+is particularly useful.
+
+Ordinary float arithmetic would represent:
+
+[
+5/6
+]
+
+only approximately.
+
+The exact rational result demonstrates that the pipeline remains:
+
+```text
+integer numerator
+integer denominator
+        ↓
+Fraction(numerator, denominator)
+        ↓
+exact rational
+```
+
+No float conversion occurs before rational construction.
+
+---
+
+### Formula-Replay Diagnostic
+
+The most useful post-tooling evaluator check is:
+
+```text
+W = {b}
+S = {s0,s1,s2}
+```
+
+For this pair:
+
+```text
+i(W) = 0
+|S| = 3
+skill(W) = 1
+```
+
+The correct mock numerator is:
+
+```text
+2*0 + 3 = 3
+```
+
+so:
+
+```text
+value = 3/2
+```
+
+The old capstone-shaped numerator would be:
+
+```text
+2*(0+3) = 6
+```
+
+and would incorrectly produce:
+
+```text
+3
+```
+
+Therefore observing:
+
+```python
+Fraction(3, 2)
+```
+
+directly demonstrates that the mock formula rather than the old formula is implemented.
+
+---
+
+## Evaluator Closure Commands
+
+Deliberate contract violation:
+
+```bash
+python -c 'from mock_evaluator import candidate_value; candidate_value(frozenset({"a","b"}), frozenset())'
+```
+
+Expected exception type:
+
+```text
+ZeroDivisionError
+```
+
+Module silence:
+
+```bash
+python mock_evaluator.py
+```
+
+Expected:
+
+```text
+no output
+```
+
+Tooling:
+
+```bash
+ruff check mock_evaluator.py
+```
+
+If Ruff reports an auto-fixable import-formatting issue:
+
+```bash
+ruff check mock_evaluator.py --fix
+ruff check mock_evaluator.py
+```
+
+Final formula diagnostic:
+
+```bash
+python -c 'from mock_evaluator import candidate_value; print(repr(candidate_value(frozenset({"b"}), frozenset({"s0","s1","s2"}))))'
+```
+
+Expected:
+
+```text
+Fraction(3, 2)
+```
+
+> **RULE TO BANK:** A function contract can include preconditions established by an earlier layer. The evaluator stays small because admissibility already guarantees eligibility and denominator safety; the evaluator's job is exact arithmetic, not repeated validation.
+
+```
+
+# COPY INTO `mock_evaluator.py`
+
+**No code change is needed.**
+
+Keep the current file exactly as written.
+
+The next actions are only verification, Ruff if needed, and commits.
+```
+============================================================================================================================================================
+
 
 
 
