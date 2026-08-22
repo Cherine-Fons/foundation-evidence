@@ -24065,6 +24065,1410 @@ Then exact oracle equality, module silence, Ruff, and the two commits above.
 ==============================================================================================================================================================
 
 
+Excellent. Search is committed, notes are committed, and the tree is clean. ✅
+
+We have now finished **all five implementation modules**. The final required build deliverable is the permanent pytest suite:
+
+```text
+test_mock.py
+```
+
+This is where the temporary terminal experiments become **repeatable evidence**.
+
+# Step 7 — Build `test_mock.py`
+
+The specification requires, at minimum:
+
+1. instance-valid test;
+2. known-answer test asserting **all three fields exactly**;
+3. one guard-isolated rejection test for each of the four admissibility conditions;
+4. parallel-copies test.
+
+That gives a minimum of:
+
+[
+1+1+4+1=7
+]
+
+tests.
+
+I want to add **three more** because they protect decisions that are particularly easy to break:
+
+8. duplicate IDs in supplied `S` are deliberately rejected;
+9. the evaluator uses the **new mock numerator**, tested with nonempty `S`;
+10. the oracle winner is accepted as a positive admissibility test.
+
+So our suite will contain:
+
+[
+\boxed{10\text{ tests}}
+]
+
+This is still small, but it tests substantially more than merely “the final answer came out right.”
+
+---
+
+# 1. Why Tests Are Different From the Interactive Checks
+
+During the build, we manually ran things such as:
+
+```bash
+python -c '...'
+```
+
+Those were useful because we could:
+
+* predict;
+* run;
+* inspect;
+* understand.
+
+But terminal checks disappear as soon as the terminal scrolls away.
+
+A pytest test turns the same claim into a **permanent executable contract**.
+
+For example, this interactive claim:
+
+```text
+The winner should be worth exactly 3.
+```
+
+becomes:
+
+```python
+assert result.value == Fraction(3, 1)
+```
+
+Now every future code change can be checked against that claim automatically.
+
+---
+
+# 2. Create the Test File
+
+Run:
+
+```bash
+code test_mock.py
+```
+
+Confirm:
+
+```bash
+ls test_mock.py
+```
+
+Expected:
+
+```text
+test_mock.py
+```
+
+Why the name matters:
+
+Pytest automatically discovers files beginning with:
+
+```text
+test_
+```
+
+so:
+
+```text
+test_mock.py
+```
+
+is discoverable.
+
+A file named:
+
+```text
+mock_test_file.py
+```
+
+would not follow the default discovery convention as clearly.
+
+---
+
+# 3. Test 1 — The Fixed Instance Is Valid
+
+We built `validate_instance()` as a fail-fast function:
+
+```text
+valid instance
+→ return normally
+
+invalid instance
+→ raise ValueError
+```
+
+Therefore the test is beautifully simple:
+
+```python
+def test_instance_is_valid():
+    validate_instance()
+```
+
+There is no explicit `assert`.
+
+Why does that count as a test?
+
+Because pytest considers the test successful if the function completes without an unexpected exception.
+
+If somebody later edits:
+
+```python
+("s3", "c", "d")
+```
+
+into:
+
+```python
+("s3", "c", "x")
+```
+
+then this test fails immediately.
+
+This is the test that gives our search's validation-ownership contract teeth.
+
+---
+
+# 4. Test 2 — Positive Admissibility Case
+
+Before testing rejection guards, include a known pair that should be accepted.
+
+Use the oracle winner:
+
+[
+W={a,b,c},\qquad S=\varnothing.
+]
+
+We know:
+
+```text
+W nonempty                    ✓
+W subset of WORKERS           ✓
+S subset of fringe(W)         ✓
+skill(W)+|S| = 4              ✓ even
+4 >= 4                        ✓
+```
+
+So:
+
+```python
+assert is_admissible(W, S) is True
+```
+
+This is important because a predicate that mistakenly returned `False` for everything would pass every rejection test.
+
+Positive and negative tests work together.
+
+---
+
+# 5. Test 3 — Condition 1 Isolation
+
+Use:
+
+```python
+W = frozenset()
+S = frozenset()
+```
+
+Condition 1 immediately fails because (W) is empty.
+
+```python
+assert is_admissible(W, S) is False
+```
+
+This tests the nonempty component of Condition 1.
+
+We already separately exercised unknown-worker handling interactively.
+
+---
+
+# 6. Test 4 — Condition 2 Isolation
+
+Use:
+
+[
+W={a,b,c},
+\qquad
+S={s0}.
+]
+
+From the oracle:
+
+[
+\partial(W)={s3}.
+]
+
+`s0` is a **real shift**, but it is internal to this crew rather than fringe.
+
+So:
+
+```text
+Condition 1 → pass
+Condition 2 → fail
+```
+
+This is a clean test of:
+
+[
+S\subseteq\partial(W).
+]
+
+---
+
+# 7. Test 5 — Condition 3 Isolation
+
+Use:
+
+[
+W={a,b,c},
+\qquad
+S={s3}.
+]
+
+Then:
+
+[
+skill(W)=4
+]
+
+and:
+
+[
+|S|=1.
+]
+
+Therefore:
+
+[
+skill(W)+|S|
+============
+
+5.
+
+]
+
+Condition 1 passes.
+
+Condition 2 passes because `s3` really is fringe.
+
+Condition 3 fails because 5 is odd.
+
+Condition 4 would have passed because:
+
+[
+5\ge4.
+]
+
+That is what makes this a properly **isolated parity test**.
+
+---
+
+# 8. Test 6 — Condition 4 Isolation
+
+This was the important test-design problem in the specification.
+
+Use:
+
+[
+W={a},
+\qquad
+S={s0}.
+]
+
+We know:
+
+[
+skill(W)=1
+]
+
+and:
+
+[
+s0\in\partial({a}).
+]
+
+Thus:
+
+```text
+Condition 1 → pass
+Condition 2 → pass
+```
+
+Then:
+
+[
+skill(W)+|S|
+============
+
+# 1+1
+
+2.
+
+]
+
+Two is even:
+
+```text
+Condition 3 → pass
+```
+
+but:
+
+[
+2<4.
+]
+
+Thus:
+
+```text
+Condition 4 → fail
+```
+
+This genuinely executes the fourth guard.
+
+---
+
+# 9. Test 7 — Parallel Physical Copies
+
+This test needs to establish that the implementation has not collapsed `s0` and `s1`.
+
+We can assert two things.
+
+For:
+
+[
+W={a,b},
+]
+
+both parallel shifts are internal:
+
+```python
+assert internal_shift_count(frozenset({"a", "b"})) == 2
+```
+
+And for:
+
+[
+W={b},
+]
+
+both parallel shifts occur separately on the fringe:
+
+```python
+assert fringe(frozenset({"b"})) == ["s0", "s1", "s2"]
+```
+
+This single test checks multiplicity in **two different primitive contexts**.
+
+---
+
+# 10. Test 8 — Duplicate Supplied Shift ID
+
+The mock specifically asked us to handle duplicate IDs in supplied `S` deliberately.
+
+So preserve that contract:
+
+```python
+S = ["s0", "s0", "s1", "s2"]
+```
+
+Then:
+
+```python
+assert is_admissible(...) is False
+```
+
+Notice we deliberately pass a **list**.
+
+A `frozenset` cannot contain duplicates, so it could never exercise the duplicate-detection branch.
+
+This is an example of designing a test input around the representation path you specifically want to exercise.
+
+---
+
+# 11. Test 9 — Exact Evaluator Formula
+
+This test is especially valuable because the oracle winner has empty `S`.
+
+Remember the danger:
+
+Correct mock numerator:
+
+[
+2i(W)+|S|.
+]
+
+Wrong pattern-replayed numerator:
+
+[
+2(i(W)+|S|).
+]
+
+If (S=\varnothing), they agree.
+
+So use:
+
+[
+W={b},
+\qquad
+S={s0,s1,s2}.
+]
+
+We derived:
+
+[
+value=\frac32.
+]
+
+The test is:
+
+```python
+assert candidate_value(W, S) == Fraction(3, 2)
+```
+
+If somebody accidentally changes the numerator to the capstone formula, this test will fail dramatically because the function would return 3 instead.
+
+This is a **specification-difference regression test**.
+
+---
+
+# 12. Test 10 — The Known-Answer Oracle
+
+This is the central end-to-end test.
+
+Run:
+
+```python
+result = find_max_value()
+```
+
+Then assert all three fields:
+
+```python
+assert result.value == Fraction(3, 1)
+assert result.W == frozenset({"a", "b", "c"})
+assert result.S == frozenset()
+```
+
+No float.
+
+No `pytest.approx`.
+
+No string comparison.
+
+Exact mathematical equality.
+
+This test traverses:
+
+```text
+instance data
+    ↓
+primitives
+    ↓
+admissibility
+    ↓
+evaluator
+    ↓
+search
+```
+
+and compares the result against an oracle that existed in Git **before any of those modules existed**.
+
+That is a legitimate known-answer test.
+
+---
+
+# 13. What Are We Not Testing Here?
+
+We are not putting the `89` and `37` counts into the minimum permanent suite yet.
+
+Those were excellent **search-audit diagnostics**, but the core specification does not require exposing enumeration counters from `find_max_value()`.
+
+We could duplicate the enumeration loops inside tests to assert them, but that risks writing a second search algorithm in the test suite.
+
+For now we have recorded those counts in the notes and manually checked them.
+
+The permanent suite focuses on externally meaningful contracts.
+
+---
+
+# 14. Imports
+
+The suite needs:
+
+```python
+from fractions import Fraction
+
+from mock_admissibility import is_admissible
+from mock_evaluator import candidate_value
+from mock_instance import validate_instance
+from mock_primitives import fringe, internal_shift_count
+from mock_search import find_max_value
+```
+
+Notice `pytest` itself does **not** need to be imported.
+
+Why?
+
+We are not currently using:
+
+```python
+pytest.raises
+pytest.approx
+```
+
+or any other `pytest` object.
+
+Pytest discovers and executes ordinary functions beginning with:
+
+```text
+test_
+```
+
+So avoid an unused:
+
+```python
+import pytest
+```
+
+Ruff would rightly complain.
+
+---
+
+# 15. Prediction Before Running
+
+We will have exactly these ten tests:
+
+```text
+1. test_instance_is_valid
+2. test_accepts_oracle_winner
+3. test_rejects_empty_W
+4. test_rejects_nonfringe_shift_in_S
+5. test_rejects_odd_skill_plus_S_size
+6. test_rejects_total_below_four
+7. test_parallel_shift_copies_are_counted_separately
+8. test_rejects_duplicate_shift_ids_in_supplied_S
+9. test_evaluator_uses_exact_mock_formula
+10. test_bruteforce_search_returns_hand_derived_optimum
+```
+
+Therefore my prediction is:
+
+```text
+10 collected
+10 passed
+```
+
+---
+
+# 16. Paste the Complete Test File
+
+Put the complete block below into `test_mock.py`.
+
+Then run:
+
+```bash
+python -m pytest test_mock.py -v
+```
+
+Expected final tally:
+
+```text
+10 passed
+```
+
+Do **not commit immediately** after pytest. We will then run Ruff on all five mock implementation modules plus the test file together and do one final full-suite verification.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Step 7 — Permanent Test Suite
+
+The final required build deliverable is:
+
+```text
+test_mock.py
+````
+
+Interactive terminal checks are useful during development, but they are temporary.
+
+Pytest converts the important claims established during the build into permanent executable contracts.
+
+The suite contains ten tests.
+
+---
+
+### Test 1 — Fixed Instance Is Valid
+
+```python
+def test_instance_is_valid():
+    validate_instance()
+```
+
+`validate_instance()` has a fail-fast contract:
+
+```text
+valid instance
+→ returns normally
+
+invalid instance
+→ raises ValueError
+```
+
+Therefore the test passes simply by reaching the end without an exception.
+
+This gives the search's instance-validation contract executable enforcement.
+
+---
+
+### Test 2 — Known Valid Pair Is Accepted
+
+Use the oracle winner:
+
+```text
+W = {a,b,c}
+S = ∅
+```
+
+All four admissibility conditions pass.
+
+Expected:
+
+```text
+True
+```
+
+A positive test is necessary because rejection tests alone could all pass even if the predicate incorrectly returned `False` for every input.
+
+---
+
+### Test 3 — Condition 1 Isolation
+
+Use:
+
+```text
+W = ∅
+S = ∅
+```
+
+Condition 1 fails immediately because the crew is empty.
+
+Expected:
+
+```text
+False
+```
+
+---
+
+### Test 4 — Condition 2 Isolation
+
+Use:
+
+```text
+W = {a,b,c}
+S = {s0}
+```
+
+From the oracle:
+
+```text
+fringe(W) = {s3}
+```
+
+`s0` is a real physical shift but is internal rather than fringe.
+
+Thus:
+
+```text
+Condition 1 → pass
+Condition 2 → fail
+```
+
+Expected:
+
+```text
+False
+```
+
+---
+
+### Test 5 — Condition 3 Isolation
+
+Use:
+
+```text
+W = {a,b,c}
+S = {s3}
+```
+
+Then:
+
+```text
+Condition 1 → pass
+Condition 2 → pass
+
+skill(W) = 4
+|S| = 1
+total = 5
+```
+
+Five is odd.
+
+Therefore Condition 3 fails.
+
+Since:
+
+```text
+5 >= 4
+```
+
+Condition 4 would have passed, making this a clean parity isolation test.
+
+Expected:
+
+```text
+False
+```
+
+---
+
+### Test 6 — Condition 4 Isolation
+
+Use:
+
+```text
+W = {a}
+S = {s0}
+```
+
+From the oracle:
+
+```text
+skill({a}) = 1
+fringe({a}) = {s0,s1}
+```
+
+Thus:
+
+```text
+Condition 1 → pass
+Condition 2 → pass
+
+total
+= skill(W) + |S|
+= 1 + 1
+= 2
+
+Condition 3:
+2 is even
+→ pass
+
+Condition 4:
+2 >= 4
+→ fail
+```
+
+Expected:
+
+```text
+False
+```
+
+This enforces the guard-isolation principle permanently.
+
+---
+
+### Test 7 — Parallel Copies Remain Distinct
+
+For:
+
+```text
+W = {a,b}
+```
+
+both:
+
+```text
+s0 = (a,b)
+s1 = (a,b)
+```
+
+are internal.
+
+Therefore:
+
+```text
+internal_shift_count({a,b}) = 2
+```
+
+For:
+
+```text
+W = {b}
+```
+
+both parallel copies are separately on the fringe, together with `s2`.
+
+Therefore:
+
+```text
+fringe({b}) = ["s0", "s1", "s2"]
+```
+
+This test would fail if the representation ever collapsed parallel physical copies.
+
+---
+
+### Test 8 — Duplicate Supplied Shift ID
+
+The supplied collection:
+
+```python
+["s0", "s0", "s1", "s2"]
+```
+
+contains the same physical shift ID twice.
+
+Because mathematical `S` is a set of physical shift copies, the predicate deliberately rejects this malformed representation.
+
+The test intentionally passes a list rather than a `frozenset`, because a `frozenset` would erase duplicates before the function received them.
+
+Expected:
+
+```text
+False
+```
+
+---
+
+### Test 9 — Evaluator Uses the Mock Formula
+
+The winner alone cannot distinguish:
+
+```text
+2*i(W) + |S|
+```
+
+from the incorrect capstone-shaped expression:
+
+```text
+2*(i(W) + |S|)
+```
+
+because the winner has:
+
+```text
+|S| = 0
+```
+
+Therefore use:
+
+```text
+W = {b}
+S = {s0,s1,s2}
+```
+
+For this candidate:
+
+```text
+i(W) = 0
+skill(W) = 1
+|S| = 3
+```
+
+The correct mock formula gives:
+
+```text
+numerator = 2*0 + 3 = 3
+denominator = 1 + 3 - 2 = 2
+value = 3/2
+```
+
+Thus the permanent regression assertion is:
+
+```python
+assert candidate_value(W, S) == Fraction(3, 2)
+```
+
+If the old formula were accidentally replayed, the test would fail because the incorrect value would be `3`.
+
+---
+
+### Test 10 — End-to-End Known-Answer Oracle
+
+The independently committed oracle proves:
+
+```text
+value = 3
+W = {a,b,c}
+S = ∅
+```
+
+Therefore:
+
+```python
+result = find_max_value()
+```
+
+must satisfy exactly:
+
+```python
+result.value == Fraction(3, 1)
+result.W == frozenset({"a", "b", "c"})
+result.S == frozenset()
+```
+
+This is exact equality.
+
+No `pytest.approx` belongs here because the evaluator uses exact `Fraction` arithmetic.
+
+The oracle test covers the complete pipeline:
+
+```text
+instance
+    ↓
+primitives
+    ↓
+admissibility
+    ↓
+evaluator
+    ↓
+search
+```
+
+against a mathematical answer that was committed before implementation existed.
+
+---
+
+## Test Count Prediction
+
+The suite contains:
+
+```text
+10 tests
+```
+
+Therefore:
+
+```bash
+python -m pytest test_mock.py -v
+```
+
+should report:
+
+```text
+10 passed
+```
+
+The suite deliberately includes both:
+
+```text
+component tests
+```
+
+and:
+
+```text
+end-to-end known-answer test
+```
+
+because a correct final output alone does not prove each guard or representation invariant is functioning for the intended reason.
+
+> **RULE TO BANK:** A strong test suite does not merely ask whether the final answer is right. It permanently tests the assumptions, guards, representation invariants, formula distinctions, and exact known answer that make that result trustworthy.
+
+````
+
+# COPY INTO `test_mock.py`
+
+```python
+# ==================================================================================================
+# MOCK EXIT 1 — PERMANENT TEST SUITE
+# ==================================================================================================
+#
+# PURPOSE:
+#
+# Convert the hand-derived oracle and the interactive development checks
+# into permanent, repeatable regression tests.
+#
+#
+# THE SUITE TESTS:
+#
+#     1. the fixed instance is valid
+#     2. a known admissible pair is accepted
+#     3. admissibility Condition 1 in isolation
+#     4. admissibility Condition 2 in isolation
+#     5. admissibility Condition 3 in isolation
+#     6. admissibility Condition 4 in isolation
+#     7. parallel physical shift copies remain distinct
+#     8. duplicate IDs in supplied S are deliberately rejected
+#     9. the evaluator uses the MOCK objective formula exactly
+#    10. exhaustive search reproduces the hand-derived oracle exactly
+#
+#
+# EXACTNESS:
+#
+# The checker uses Fraction arithmetic.
+#
+# Therefore exact known-answer tests use:
+#
+#     ==
+#
+# rather than:
+#
+#     pytest.approx(...)
+#
+# ==================================================================================================
+
+
+from fractions import Fraction
+
+from mock_admissibility import is_admissible
+from mock_evaluator import candidate_value
+from mock_instance import validate_instance
+from mock_primitives import fringe, internal_shift_count
+from mock_search import find_max_value
+
+
+# ==================================================================================================
+# TEST 1 — FIXED INSTANCE IS VALID
+# ==================================================================================================
+#
+# validate_instance() raises ValueError on malformed fixed data.
+#
+# A valid instance returns normally.
+#
+# Therefore this test passes simply by reaching the end without an
+# exception.
+#
+# ==================================================================================================
+
+
+def test_instance_is_valid():
+    validate_instance()
+
+
+# ==================================================================================================
+# TEST 2 — ACCEPT THE ORACLE WINNER
+# ==================================================================================================
+#
+# Oracle pair:
+#
+#     W = {"a", "b", "c"}
+#     S = empty
+#
+# Hand-derived checks:
+#
+#     W nonempty and valid                 -> pass
+#     S subseteq fringe(W)                 -> pass
+#     skill(W) + |S| = 4                   -> even
+#     4 >= 4                               -> pass
+#
+# Therefore:
+#
+#     is_admissible(W, S) is True
+#
+# ==================================================================================================
+
+
+def test_accepts_oracle_winner():
+    W = frozenset({"a", "b", "c"})
+    S = frozenset()
+
+    assert is_admissible(W, S) is True
+
+
+# ==================================================================================================
+# TEST 3 — CONDITION 1: REJECT EMPTY W
+# ==================================================================================================
+#
+# W must be nonempty.
+#
+# The empty crew fails the first mathematical guard immediately.
+#
+# ==================================================================================================
+
+
+def test_rejects_empty_W():
+    W = frozenset()
+    S = frozenset()
+
+    assert is_admissible(W, S) is False
+
+
+# ==================================================================================================
+# TEST 4 — CONDITION 2: REJECT NON-FRINGE SHIFT
+# ==================================================================================================
+#
+# For:
+#
+#     W = {"a", "b", "c"}
+#
+# the hand-derived fringe is:
+#
+#     {"s3"}
+#
+# Shift s0 exists in the graph but is internal to this crew.
+#
+# Thus:
+#
+#     Condition 1 -> pass
+#     Condition 2 -> fail
+#
+# ==================================================================================================
+
+
+def test_rejects_nonfringe_shift_in_S():
+    W = frozenset({"a", "b", "c"})
+    S = frozenset({"s0"})
+
+    assert is_admissible(W, S) is False
+
+
+# ==================================================================================================
+# TEST 5 — CONDITION 3: REJECT ODD skill(W) + |S|
+# ==================================================================================================
+#
+# Use:
+#
+#     W = {"a", "b", "c"}
+#     S = {"s3"}
+#
+# Here:
+#
+#     s3 is genuinely on the fringe
+#
+# so Conditions 1 and 2 pass.
+#
+# Then:
+#
+#     skill(W) = 4
+#     |S| = 1
+#
+#     total = 5
+#
+# Five is odd, so Condition 3 fails.
+#
+# Since:
+#
+#     5 >= 4
+#
+# the lower-bound condition would have passed.
+#
+# This isolates parity.
+#
+# ==================================================================================================
+
+
+def test_rejects_odd_skill_plus_S_size():
+    W = frozenset({"a", "b", "c"})
+    S = frozenset({"s3"})
+
+    assert is_admissible(W, S) is False
+
+
+# ==================================================================================================
+# TEST 6 — CONDITION 4: REJECT TOTAL BELOW FOUR
+# ==================================================================================================
+#
+# Use the guard-isolated pair:
+#
+#     W = {"a"}
+#     S = {"s0"}
+#
+# Hand-derived facts:
+#
+#     skill(W) = 1
+#     fringe(W) = {"s0", "s1"}
+#
+# Therefore:
+#
+#     Condition 1 -> pass
+#     Condition 2 -> pass
+#
+# and:
+#
+#     skill(W) + |S|
+#         = 1 + 1
+#         = 2
+#
+# Two is even:
+#
+#     Condition 3 -> pass
+#
+# but:
+#
+#     2 < 4
+#
+# so:
+#
+#     Condition 4 -> fail
+#
+# ==================================================================================================
+
+
+def test_rejects_total_below_four():
+    W = frozenset({"a"})
+    S = frozenset({"s0"})
+
+    assert is_admissible(W, S) is False
+
+
+# ==================================================================================================
+# TEST 7 — PARALLEL PHYSICAL COPIES REMAIN DISTINCT
+# ==================================================================================================
+#
+# The fixed instance contains:
+#
+#     s0 = (a,b)
+#     s1 = (a,b)
+#
+# These are parallel but distinct physical shift copies.
+#
+#
+# For:
+#
+#     W = {"a", "b"}
+#
+# both are internal, so:
+#
+#     i(W) = 2
+#
+#
+# For:
+#
+#     W = {"b"}
+#
+# both parallel copies are fringe shifts, together with s2.
+#
+# Stable fringe order should therefore be:
+#
+#     ["s0", "s1", "s2"]
+#
+# ==================================================================================================
+
+
+def test_parallel_shift_copies_are_counted_separately():
+    assert internal_shift_count(frozenset({"a", "b"})) == 2
+
+    assert fringe(frozenset({"b"})) == ["s0", "s1", "s2"]
+
+
+# ==================================================================================================
+# TEST 8 — REJECT DUPLICATE IDS IN SUPPLIED S
+# ==================================================================================================
+#
+# Mathematically S is a set of physical shift copies.
+#
+# The same physical ID therefore cannot be selected twice.
+#
+# A list is deliberately supplied here because a frozenset would erase
+# duplicates before is_admissible() had an opportunity to detect them.
+#
+# ==================================================================================================
+
+
+def test_rejects_duplicate_shift_ids_in_supplied_S():
+    W = frozenset({"b"})
+    S = ["s0", "s0", "s1", "s2"]
+
+    assert is_admissible(W, S) is False
+
+
+# ==================================================================================================
+# TEST 9 — EVALUATOR USES THE MOCK FORMULA
+# ==================================================================================================
+#
+# The mock numerator is:
+#
+#     2*i(W) + |S|
+#
+# NOT:
+#
+#     2*(i(W) + |S|)
+#
+#
+# Use a candidate with nonempty S so the two formulas differ:
+#
+#     W = {"b"}
+#     S = {"s0", "s1", "s2"}
+#
+# Then:
+#
+#     i(W) = 0
+#     skill(W) = 1
+#     |S| = 3
+#
+# Correct mock arithmetic:
+#
+#     numerator = 2*0 + 3 = 3
+#     denominator = 1 + 3 - 2 = 2
+#
+#     value = 3/2
+#
+# The old capstone-shaped numerator would incorrectly produce:
+#
+#     2*(0+3) = 6
+#
+# and therefore the wrong value 3.
+#
+# ==================================================================================================
+
+
+def test_evaluator_uses_exact_mock_formula():
+    W = frozenset({"b"})
+    S = frozenset({"s0", "s1", "s2"})
+
+    assert candidate_value(W, S) == Fraction(3, 2)
+
+
+# ==================================================================================================
+# TEST 10 — END-TO-END HAND-DERIVED ORACLE
+# ==================================================================================================
+#
+# The oracle was derived and committed before checker implementation.
+#
+# It proves that the UNIQUE maximizing pair is:
+#
+#     W* = {"a", "b", "c"}
+#     S* = empty
+#
+# with exact value:
+#
+#     3
+#
+# The exhaustive implementation must therefore reproduce all three
+# fields exactly.
+#
+# No floating-point tolerance is used.
+#
+# ==================================================================================================
+
+
+def test_bruteforce_search_returns_hand_derived_optimum():
+    result = find_max_value()
+
+    assert result.value == Fraction(3, 1)
+    assert result.W == frozenset({"a", "b", "c"})
+    assert result.S == frozenset()
+````
+
+Now run:
+
+```bash
+python -m pytest test_mock.py -v
+```
+
+**Prediction: `10 collected, 10 passed`.**
+
+Paste the pytest output next.
+
+==============================================================================================================================================================
 
 
 
