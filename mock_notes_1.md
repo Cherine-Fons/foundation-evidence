@@ -11446,3 +11446,4138 @@ Then we begin **`mock_primitives.py`**, and I’ll teach all three functions fro
 
 ==================================================================================================================================================================
 
+Good. We now begin the **second implementation layer**: the mathematical primitives.
+
+The instance layer answered:
+
+> What is the fixed graph, and is its data structurally valid?
+
+The primitives layer answers:
+
+> Given a particular crew (W), what are the basic mathematical quantities associated with it?
+
+We are going to build these **one at a time**, not all three at once:
+
+```text
+1. skill_of(W)
+2. internal_shift_count(W)
+3. fringe(W)
+```
+
+We will not commit `mock_primitives.py` until all three are built, predicted against the oracle, and exercised.
+
+# Step 3A — Create `mock_primitives.py`
+
+First make sure the previous step is clean:
+
+```bash
+git status
+```
+
+Ideally:
+
+```text
+nothing to commit, working tree clean
+```
+
+Now create:
+
+```bash
+code mock_primitives.py
+```
+
+Confirm:
+
+```bash
+ls mock_primitives.py
+```
+
+Expected:
+
+```text
+mock_primitives.py
+```
+
+---
+
+# 1. What Is a “Primitive”?
+
+Here, “primitive” does not mean a Python primitive type like `int`.
+
+It means:
+
+> A small, foundational computation that more complicated checker logic will build on.
+
+Our later admissibility function will need:
+
+[
+skill(W)
+]
+
+The evaluator will need:
+
+[
+skill(W)
+]
+
+and:
+
+[
+i(W).
+]
+
+The search will need:
+
+[
+\partial(W)
+]
+
+in order to know which possible (S)'s exist.
+
+So the dependency structure is:
+
+```text
+fixed instance
+      ↓
+mathematical primitives
+      ↓
+admissibility + evaluator
+      ↓
+search
+```
+
+If the primitives are wrong, everything above them can be perfectly written and still return mathematically wrong answers.
+
+That is why these tiny functions matter so much.
+
+---
+
+# 2. Primitive 1 — `skill_of(W)`
+
+Mathematically, the definition is:
+
+[
+skill(W)=\sum_{w\in W}skill(w).
+]
+
+That means:
+
+> Look at every worker in the crew and add that worker's stored skill value.
+
+For example:
+
+[
+W={a,b,c}.
+]
+
+The skills are:
+
+```text
+a → 1
+b → 1
+c → 2
+```
+
+Therefore:
+
+[
+skill({a,b,c})
+==============
+
+# 1+1+2
+
+4.
+
+]
+
+There is no graph-edge reasoning involved in this function.
+
+It does not care about:
+
+```text
+s0
+s1
+s2
+s3
+```
+
+at all.
+
+It only needs:
+
+```text
+WORKERS
+SKILL_VALUES
+```
+
+That is why our initial import should be:
+
+```python
+from mock_instance import SKILL_VALUES, WORKERS
+```
+
+We should **not** import `SHIFTS` yet merely because this module will eventually need it. At this moment, no executable function uses `SHIFTS`.
+
+That keeps the file free of unused imports and makes each dependency explicit.
+
+---
+
+# 3. What Should Happen If `W` Contains an Unknown Worker?
+
+Suppose someone calls:
+
+```python
+skill_of({"a", "x"})
+```
+
+where:
+
+```text
+"x" not in WORKERS
+```
+
+There are two possible philosophies.
+
+We could let this line:
+
+```python
+SKILL_VALUES[worker]
+```
+
+eventually raise:
+
+```text
+KeyError: 'x'
+```
+
+Or we can establish a clear query contract and raise something semantic:
+
+```text
+ValueError: W contains unknown worker 'x'
+```
+
+I prefer the second.
+
+Why?
+
+`validate_instance()` proves that the **stored instance** is internally valid.
+
+But it does not prove that every future caller will submit a valid **query crew**.
+
+These are different things:
+
+```text
+instance validation
+    "Is the graph itself valid?"
+
+query validation
+    "Does this requested W actually refer to workers in this graph?"
+```
+
+So `skill_of(W)` should explicitly reject an unknown worker.
+
+This mirrors a lesson from your capstone's `f_of(U)`.
+
+---
+
+# 4. Why `skill_of(∅)` Should Return 0
+
+There is another contract question.
+
+What if:
+
+```python
+W = frozenset()
+```
+
+?
+
+The eventual admissibility rule says:
+
+[
+W\neq\varnothing.
+]
+
+Does that mean `skill_of()` should reject the empty set?
+
+No.
+
+The mathematical sum over an empty set is:
+
+[
+\sum_{w\in\varnothing}skill(w)=0.
+]
+
+So:
+
+```python
+skill_of(frozenset())
+```
+
+should naturally return:
+
+```text
+0
+```
+
+That preserves separation of responsibilities:
+
+```text
+skill_of(W)
+    computes the mathematical quantity
+
+is_admissible(W, S)
+    later decides whether empty W is allowed to compete
+```
+
+We do not want to smuggle an admissibility condition into a basic primitive.
+
+This was exactly the architectural distinction you learned with `f_of(∅)=0`.
+
+---
+
+# 5. Comments-First Algorithm
+
+Before executable code, the reasoning is:
+
+```text
+INPUT:
+    a collection W of workers
+
+1. Start:
+       total = 0
+
+2. For each worker in W:
+
+       first verify:
+           worker ∈ WORKERS
+
+       if not:
+           raise ValueError naming that worker
+
+       otherwise:
+           look up SKILL_VALUES[worker]
+
+       add that value to total
+
+3. Return total
+```
+
+This is an **accumulator pattern**, which you learned much earlier.
+
+Start with the additive identity:
+
+```python
+total = 0
+```
+
+then repeatedly do:
+
+```python
+total += value
+```
+
+---
+
+# 6. Predictions Before Running
+
+We already know the answers from the hand oracle.
+
+That is important: **the program is not supplying our expected values.**
+
+## Prediction 1
+
+```python
+skill_of(frozenset({"a", "b", "c"}))
+```
+
+The hand calculation is:
+
+[
+1+1+2=4.
+]
+
+Prediction:
+
+```text
+4
+```
+
+---
+
+## Prediction 2
+
+```python
+skill_of(frozenset({"b", "d"}))
+```
+
+The hand calculation is:
+
+[
+1+2=3.
+]
+
+Prediction:
+
+```text
+3
+```
+
+---
+
+## Prediction 3
+
+```python
+skill_of(WORKERS)
+```
+
+Since:
+
+[
+WORKERS={a,b,c,d},
+]
+
+we get:
+
+[
+1+1+2+2=6.
+]
+
+Prediction:
+
+```text
+6
+```
+
+---
+
+## Prediction 4 — Empty Crew
+
+```python
+skill_of(frozenset())
+```
+
+The loop runs zero times.
+
+`total` starts at zero and never changes.
+
+Prediction:
+
+```text
+0
+```
+
+Again, this does **not** mean an empty crew is admissible.
+
+It means the mathematical primitive is well-defined on the empty set.
+
+---
+
+# 7. What the Function Actually Looks Like
+
+Executable logic:
+
+```python
+def skill_of(W):
+    total = 0
+
+    for worker in W:
+        if worker not in WORKERS:
+            raise ValueError(f"W contains unknown worker {worker!r}")
+
+        total += SKILL_VALUES[worker]
+
+    return total
+```
+
+Walk through:
+
+```python
+skill_of({"a", "b", "c"})
+```
+
+Start:
+
+```text
+total = 0
+```
+
+Suppose iteration visits `"a"`:
+
+```text
+"a" is known
+total = 0 + 1 = 1
+```
+
+Then `"b"`:
+
+```text
+"b" is known
+total = 1 + 1 = 2
+```
+
+Then `"c"`:
+
+```text
+"c" is known
+total = 2 + 2 = 4
+```
+
+Return:
+
+```text
+4
+```
+
+Because a set's iteration order should not be relied upon, Python might visit the workers in another order.
+
+But addition is order-independent here:
+
+[
+1+1+2=2+1+1=4.
+]
+
+So deterministic worker iteration is not required for this primitive.
+
+Later, deterministic **search enumeration** will be a different issue.
+
+---
+
+# 8. Put the File in Place
+
+Paste the complete file at the end of this response into:
+
+```text
+mock_primitives.py
+```
+
+Save it.
+
+Then run these four checks individually:
+
+```bash
+python -c 'from mock_primitives import skill_of; print(skill_of(frozenset({"a", "b", "c"})))'
+```
+
+Prediction:
+
+```text
+4
+```
+
+Then:
+
+```bash
+python -c 'from mock_primitives import skill_of; print(skill_of(frozenset({"b", "d"})))'
+```
+
+Prediction:
+
+```text
+3
+```
+
+Then:
+
+```bash
+python -c 'from mock_instance import WORKERS; from mock_primitives import skill_of; print(skill_of(WORKERS))'
+```
+
+Prediction:
+
+```text
+6
+```
+
+Then:
+
+```bash
+python -c 'from mock_primitives import skill_of; print(skill_of(frozenset()))'
+```
+
+Prediction:
+
+```text
+0
+```
+
+---
+
+# 9. Prove the Query Guard Too
+
+Then deliberately call:
+
+```bash
+python -c 'from mock_primitives import skill_of; skill_of(frozenset({"a", "x"}))'
+```
+
+Prediction:
+
+```text
+ValueError: W contains unknown worker 'x'
+```
+
+Notice that we do **not** corrupt `mock_instance.py` for this test.
+
+The instance is perfectly valid.
+
+We are testing a bad **query**, not bad stored data.
+
+That is a new distinction worth noticing:
+
+```text
+bad stored graph
+→ validate_instance() raises
+
+bad crew submitted to primitive
+→ skill_of() raises
+```
+
+Both use exceptions because both represent violations of a function's input contract.
+
+Later:
+
+```text
+validly formed but mathematically inadmissible candidate
+→ is_admissible() returns False
+```
+
+That will be different again.
+
+---
+
+# 10. Do Not Commit Yet
+
+After these checks, leave `mock_primitives.py` uncommitted.
+
+We still need to add:
+
+```text
+internal_shift_count(W)
+fringe(W)
+```
+
+Then we will run all primitive predictions together, lint the complete module, and commit it as one coherent unit.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Step 3 — Mathematical Primitives
+
+The second implementation layer is:
+
+```text
+mock_primitives.py
+````
+
+A primitive here means a small foundational mathematical computation used by higher-level checker logic.
+
+The dependency structure is:
+
+```text
+mock_instance.py
+    fixed validated data
+            ↓
+mock_primitives.py
+    skill(W)
+    i(W)
+    ∂(W)
+            ↓
+admissibility and evaluation
+            ↓
+exhaustive search
+```
+
+If a primitive computes the wrong mathematical quantity, every higher layer can be internally correct and still produce a wrong result.
+
+The primitives are therefore tested against values already established independently in `MOCK_ORACLE.md`.
+
+---
+
+### Primitive 1 — `skill_of(W)`
+
+The mathematical definition is:
+
+[
+skill(W)
+========
+
+\sum_{w\in W}skill(w).
+]
+
+The function simply adds the skill value associated with each worker in `W`.
+
+For example:
+
+```text
+W = {a,b,c}
+```
+
+has:
+
+```text
+skill(a) = 1
+skill(b) = 1
+skill(c) = 2
+```
+
+therefore:
+
+[
+skill({a,b,c})
+==============
+
+# 1+1+2
+
+4.
+
+]
+
+---
+
+### Required Instance Data
+
+`skill_of(W)` needs:
+
+```text
+WORKERS
+SKILL_VALUES
+```
+
+It does not yet need `SHIFTS`.
+
+Therefore the initial module import is:
+
+```python
+from mock_instance import SKILL_VALUES, WORKERS
+```
+
+Avoid importing future dependencies before executable code actually needs them.
+
+---
+
+### Query Contract
+
+`validate_instance()` establishes that the stored fixed instance is valid.
+
+It does not establish that every later caller supplies a valid crew.
+
+Therefore `skill_of(W)` explicitly checks:
+
+```text
+worker ∈ WORKERS
+```
+
+for every worker supplied in `W`.
+
+A query such as:
+
+```python
+skill_of(frozenset({"a", "x"}))
+```
+
+should raise:
+
+```text
+ValueError: W contains unknown worker 'x'
+```
+
+rather than leaking a generic dictionary `KeyError`.
+
+This separates two kinds of validation:
+
+```text
+instance validation:
+    Is the stored graph itself valid?
+
+query validation:
+    Does this requested W refer only to workers belonging to this graph?
+```
+
+---
+
+### Empty Crew Behavior
+
+`skill_of()` should not reject:
+
+```text
+W = ∅
+```
+
+The mathematical empty sum is:
+
+[
+skill(\varnothing)=0.
+]
+
+The implementation starts:
+
+```python
+total = 0
+```
+
+and an empty crew causes the loop to execute zero times, leaving:
+
+```text
+total = 0
+```
+
+The later admissibility layer is responsible for enforcing:
+
+[
+W\neq\varnothing.
+]
+
+This preserves separation of concerns:
+
+```text
+primitive
+→ compute the mathematical quantity
+
+admissibility
+→ decide whether a candidate may compete
+```
+
+---
+
+### Accumulator Pattern
+
+The function uses the accumulator pattern:
+
+```text
+start total at 0
+
+for every worker in W:
+    validate worker
+    add worker's skill to total
+
+return total
+```
+
+Executable shape:
+
+```python
+def skill_of(W):
+    total = 0
+
+    for worker in W:
+        if worker not in WORKERS:
+            raise ValueError(f"W contains unknown worker {worker!r}")
+
+        total += SKILL_VALUES[worker]
+
+    return total
+```
+
+---
+
+### Hand-Derived Predictions
+
+The oracle gives the expected values before execution.
+
+#### Prediction 1
+
+```python
+skill_of(frozenset({"a", "b", "c"}))
+```
+
+Hand arithmetic:
+
+[
+1+1+2=4.
+]
+
+Expected:
+
+```text
+4
+```
+
+#### Prediction 2
+
+```python
+skill_of(frozenset({"b", "d"}))
+```
+
+Hand arithmetic:
+
+[
+1+2=3.
+]
+
+Expected:
+
+```text
+3
+```
+
+#### Prediction 3
+
+```python
+skill_of(WORKERS)
+```
+
+Hand arithmetic:
+
+[
+1+1+2+2=6.
+]
+
+Expected:
+
+```text
+6
+```
+
+#### Prediction 4
+
+```python
+skill_of(frozenset())
+```
+
+Expected:
+
+```text
+0
+```
+
+because the sum over the empty set is zero.
+
+---
+
+### Unknown-Worker Prediction
+
+For:
+
+```python
+skill_of(frozenset({"a", "x"}))
+```
+
+the instance itself remains valid, but the query violates the primitive's contract.
+
+Expected final traceback line:
+
+```text
+ValueError: W contains unknown worker 'x'
+```
+
+This is a query-validation test, not an instance-corruption test.
+
+---
+
+> **RULE TO BANK:** A primitive should faithfully compute its mathematical quantity while rejecting inputs for which that quantity is being requested on objects outside the instance. Higher-level feasibility conditions belong to the higher-level predicate, not inside the primitive.
+
+````
+
+# COPY INTO `mock_primitives.py`
+
+```python
+# ==================================================================================================
+# MOCK EXIT 1 — MATHEMATICAL PRIMITIVES
+# ==================================================================================================
+#
+# PURPOSE:
+#
+# Implement the small mathematical quantities that later checker layers
+# will depend on.
+#
+#
+# THE THREE PRIMITIVES WILL BE:
+#
+#     1. skill_of(W)
+#     2. internal_shift_count(W)
+#     3. fringe(W)
+#
+# They are being built and verified one at a time.
+#
+#
+# RESPONSIBILITY BOUNDARY:
+#
+# These functions compute mathematical quantities associated with a crew W.
+#
+# They do NOT decide whether a candidate pair (W, S) is admissible.
+#
+# For example:
+#
+#     skill_of(empty crew)
+#
+# is mathematically well-defined and equals 0, even though the later
+# admissibility rules reject an empty crew.
+#
+#
+# QUERY VALIDATION:
+#
+# validate_instance() protects the STORED instance.
+#
+# These primitives must still reject a query that refers to a worker
+# outside WORKERS.
+#
+# ==================================================================================================
+
+
+from mock_instance import SKILL_VALUES, WORKERS
+
+
+# ==================================================================================================
+# PRIMITIVE 1 — skill_of(W)
+# ==================================================================================================
+#
+# MATHEMATICAL DEFINITION:
+#
+#     skill(W) = sum of skill(w) over every worker w in W
+#
+#
+# INPUT:
+#
+#     W
+#
+# A collection of workers.
+#
+# Examples:
+#
+#     frozenset({"a", "b"})
+#     frozenset({"a", "b", "c"})
+#     frozenset()
+#
+#
+# OUTPUT:
+#
+#     an integer equal to skill(W)
+#
+#
+# QUERY CONTRACT:
+#
+# Every worker supplied in W must belong to:
+#
+#     WORKERS
+#
+# Example invalid query:
+#
+#     W = {"a", "x"}
+#
+# Since:
+#
+#     "x" not in WORKERS
+#
+# raise:
+#
+#     ValueError: W contains unknown worker 'x'
+#
+#
+# EMPTY-CREW BEHAVIOR:
+#
+#     skill(empty set) = 0
+#
+# This primitive therefore does not reject an empty W.
+#
+# The later admissibility predicate will enforce:
+#
+#     W != empty
+#
+#
+# COMMENTS-FIRST ALGORITHM:
+#
+# 1. Start:
+#
+#        total = 0
+#
+# 2. For every worker in W:
+#
+#        verify worker belongs to WORKERS
+#
+#        if not:
+#            raise ValueError naming that worker
+#
+#        otherwise:
+#            add SKILL_VALUES[worker] to total
+#
+# 3. Return total.
+#
+#
+# HAND-DERIVED PREDICTIONS:
+#
+#     skill_of({"a", "b", "c"})
+#
+#         = 1 + 1 + 2
+#         = 4
+#
+#
+#     skill_of({"b", "d"})
+#
+#         = 1 + 2
+#         = 3
+#
+#
+#     skill_of(WORKERS)
+#
+#         = 1 + 1 + 2 + 2
+#         = 6
+#
+#
+#     skill_of(empty set)
+#
+#         = 0
+#
+# ==================================================================================================
+
+
+def skill_of(W):
+    total = 0
+
+    for worker in W:
+        if worker not in WORKERS:
+            raise ValueError(f"W contains unknown worker {worker!r}")
+
+        total += SKILL_VALUES[worker]
+
+    return total
+````
+
+Run the four passing predictions and the one rejection prediction now. Then paste the outputs, and we will add **Primitive 2: `internal_shift_count(W)`** to the complete file.
+==================================================================================================================================================================
+Perfect. Every prediction matched:
+
+```text
+skill({a,b,c}) = 4      ✓
+skill({b,d})   = 3      ✓
+skill(WORKERS) = 6      ✓
+skill(∅)       = 0      ✓
+unknown "x"    → ValueError ✓
+```
+
+That proves `skill_of(W)` is doing two things correctly: it computes the mathematical sum, and it enforces its query contract.
+
+We now add **Primitive 2: `internal_shift_count(W)`**.
+
+# Step 3B — `internal_shift_count(W)`
+
+## 1. What quantity are we computing?
+
+The mathematical definition is:
+
+[
+i(W)=\text{number of physical shifts whose two workers are both in }W.
+]
+
+The key phrase is **both endpoints**.
+
+For a shift:
+
+```text
+(shift_id, worker1, worker2)
+```
+
+it is internal precisely when:
+
+```python
+worker1 in W and worker2 in W
+```
+
+This is an **AND** condition.
+
+Compare that with the fringe primitive we will build next:
+
+```text
+internal:
+both endpoints inside
+
+fringe:
+exactly one endpoint inside
+```
+
+Those must never be confused.
+
+---
+
+# 2. Why We Now Need `SHIFTS`
+
+`skill_of(W)` only needed:
+
+```text
+WORKERS
+SKILL_VALUES
+```
+
+But `internal_shift_count(W)` has to inspect the graph's actual shift copies.
+
+So the import at the top changes from:
+
+```python
+from mock_instance import SKILL_VALUES, WORKERS
+```
+
+to:
+
+```python
+from mock_instance import SHIFTS, SKILL_VALUES, WORKERS
+```
+
+This is a genuine dependency now, so it belongs in the module.
+
+---
+
+# 3. What Does the Function Actually Count?
+
+Take:
+
+[
+W={a,b}.
+]
+
+Our stored list is:
+
+```text
+s0 = (a,b)
+s1 = (a,b)
+s2 = (b,c)
+s3 = (c,d)
+```
+
+Now evaluate the condition:
+
+```python
+worker1 in W and worker2 in W
+```
+
+for every physical shift.
+
+### `s0`
+
+```text
+a in W → True
+b in W → True
+
+True and True → True
+```
+
+Count it.
+
+### `s1`
+
+Exactly the same endpoints, but this is another physical list entry:
+
+```text
+a in W → True
+b in W → True
+```
+
+Count it too.
+
+Now:
+
+```text
+count = 2
+```
+
+### `s2`
+
+```text
+b in W → True
+c in W → False
+
+True and False → False
+```
+
+Do not count it.
+
+### `s3`
+
+```text
+c in W → False
+d in W → False
+```
+
+Do not count it.
+
+Therefore:
+
+[
+i({a,b})=2.
+]
+
+---
+
+# 4. Why Parallel Copies Are Automatically Counted Correctly
+
+This is one reason our instance representation matters.
+
+`SHIFTS` contains:
+
+```python
+("s0", "a", "b"),
+("s1", "a", "b"),
+```
+
+as **two separate list entries**.
+
+Our function walks through `SHIFTS` entry by entry.
+
+So it does:
+
+```text
+see s0 → internal → +1
+see s1 → internal → +1
+```
+
+It never tries to deduplicate endpoint pairs.
+
+Therefore parallel multiplicity is preserved naturally.
+
+If instead we had represented the graph carelessly as:
+
+```python
+{("a", "b"), ("b", "c"), ("c", "d")}
+```
+
+the parallel copy would already have disappeared before this function ever ran.
+
+So there is an important architecture principle here:
+
+> A correct algorithm cannot recover distinctions that the data representation already destroyed.
+
+Our representation preserves physical copies, so the primitive can count them correctly.
+
+---
+
+# 5. Does This Function Need the Shift ID?
+
+When we loop through:
+
+```python
+for shift_id, worker1, worker2 in SHIFTS:
+```
+
+the internal-count test only needs:
+
+```text
+worker1
+worker2
+```
+
+It does not need the ID.
+
+So we can write:
+
+```python
+for _shift_id, worker1, worker2 in SHIFTS:
+```
+
+The leading underscore means:
+
+> I know this value exists in the tuple, but this particular function intentionally does not use it.
+
+That is clearer than pretending the field does not exist.
+
+---
+
+# 6. Query Contract
+
+The same issue from `skill_of(W)` applies.
+
+Suppose somebody asks:
+
+```python
+internal_shift_count({"a", "x"})
+```
+
+The graph instance is valid, but the query crew is not.
+
+Should the function silently calculate something using the valid part `{a}`?
+
+Absolutely not.
+
+That would be dangerous because the result might look plausible.
+
+So before counting shifts, we validate every worker in (W):
+
+```python
+for worker in W:
+    if worker not in WORKERS:
+        raise ValueError(...)
+```
+
+with the same contract message:
+
+```text
+ValueError: W contains unknown worker 'x'
+```
+
+Consistency across primitives is useful.
+
+---
+
+# 7. What About the Empty Crew?
+
+Again:
+
+```python
+W = frozenset()
+```
+
+is mathematically meaningful for this primitive.
+
+Can any loopless shift have **both endpoints inside the empty set**?
+
+No.
+
+Therefore:
+
+[
+i(\varnothing)=0.
+]
+
+So we do **not** reject the empty crew here.
+
+Later:
+
+```text
+is_admissible(W,S)
+```
+
+will reject empty (W).
+
+This is the same separation we established for `skill_of()`.
+
+---
+
+# 8. Comments-First Algorithm
+
+Before code, the function is:
+
+```text
+INPUT:
+    crew W
+
+1. Verify every worker in W belongs to WORKERS.
+
+2. Start:
+       count = 0
+
+3. Scan every physical shift copy in SHIFTS.
+
+4. For each:
+       (shift_id, worker1, worker2)
+
+   ask:
+
+       worker1 in W AND worker2 in W ?
+
+5. If yes:
+       count += 1
+
+6. If no:
+       do nothing
+
+7. Return count.
+```
+
+The important distinction:
+
+```text
+internal → AND
+```
+
+We will contrast this with:
+
+```text
+fringe → XOR
+```
+
+in the next step.
+
+---
+
+# 9. Predictions From the Oracle
+
+We do not guess these from the function. We already derived them by hand.
+
+## Prediction 1 — Parallel pair
+
+```python
+internal_shift_count(frozenset({"a", "b"}))
+```
+
+Internal:
+
+```text
+s0
+s1
+```
+
+Therefore:
+
+[
+i({a,b})=2.
+]
+
+Expected:
+
+```text
+2
+```
+
+---
+
+## Prediction 2 — Winning crew
+
+```python
+internal_shift_count(frozenset({"a", "b", "c"}))
+```
+
+Internal:
+
+```text
+s0 = (a,b)
+s1 = (a,b)
+s2 = (b,c)
+```
+
+`s3` crosses to `d`.
+
+Therefore:
+
+[
+i({a,b,c})=3.
+]
+
+Expected:
+
+```text
+3
+```
+
+---
+
+## Prediction 3 — `{b,c}`
+
+```python
+internal_shift_count(frozenset({"b", "c"}))
+```
+
+Only:
+
+```text
+s2 = (b,c)
+```
+
+has both endpoints inside.
+
+Therefore:
+
+[
+i({b,c})=1.
+]
+
+Expected:
+
+```text
+1
+```
+
+---
+
+## Prediction 4 — Disconnected crew `{a,c}`
+
+```python
+internal_shift_count(frozenset({"a", "c"}))
+```
+
+Check:
+
+```text
+s0 = (a,b) → b outside
+s1 = (a,b) → b outside
+s2 = (b,c) → b outside
+s3 = (c,d) → d outside
+```
+
+No shift has both endpoints in `{a,c}`.
+
+Therefore:
+
+[
+i({a,c})=0.
+]
+
+Expected:
+
+```text
+0
+```
+
+---
+
+## Prediction 5 — Whole worker set
+
+```python
+internal_shift_count(WORKERS)
+```
+
+Every endpoint of every shift lies inside the full worker set.
+
+There are four physical copies:
+
+```text
+s0
+s1
+s2
+s3
+```
+
+Therefore:
+
+[
+i(WORKERS)=4.
+]
+
+Expected:
+
+```text
+4
+```
+
+---
+
+## Prediction 6 — Empty crew
+
+```python
+internal_shift_count(frozenset())
+```
+
+No edge can have both endpoints in the empty set.
+
+Expected:
+
+```text
+0
+```
+
+---
+
+# 10. Run These After Updating the File
+
+After pasting the complete file below, save it.
+
+Run:
+
+```bash
+python -c 'from mock_primitives import internal_shift_count; print(internal_shift_count(frozenset({"a", "b"})))'
+```
+
+Prediction:
+
+```text
+2
+```
+
+Then:
+
+```bash
+python -c 'from mock_primitives import internal_shift_count; print(internal_shift_count(frozenset({"a", "b", "c"})))'
+```
+
+Prediction:
+
+```text
+3
+```
+
+Then:
+
+```bash
+python -c 'from mock_primitives import internal_shift_count; print(internal_shift_count(frozenset({"b", "c"})))'
+```
+
+Prediction:
+
+```text
+1
+```
+
+Then:
+
+```bash
+python -c 'from mock_primitives import internal_shift_count; print(internal_shift_count(frozenset({"a", "c"})))'
+```
+
+Prediction:
+
+```text
+0
+```
+
+Then:
+
+```bash
+python -c 'from mock_instance import WORKERS; from mock_primitives import internal_shift_count; print(internal_shift_count(WORKERS))'
+```
+
+Prediction:
+
+```text
+4
+```
+
+Finally:
+
+```bash
+python -c 'from mock_primitives import internal_shift_count; print(internal_shift_count(frozenset()))'
+```
+
+Prediction:
+
+```text
+0
+```
+
+And prove the query guard:
+
+```bash
+python -c 'from mock_primitives import internal_shift_count; internal_shift_count(frozenset({"b", "x"}))'
+```
+
+Expected final line:
+
+```text
+ValueError: W contains unknown worker 'x'
+```
+
+Still **do not commit**. Primitive 3 remains.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Step 3B — Primitive 2: `internal_shift_count(W)`
+
+The second mathematical primitive computes:
+
+\[
+i(W),
+\]
+
+the number of physical shift copies whose two workers both belong to crew \(W\).
+
+The defining logical condition is:
+
+```text
+worker1 in W AND worker2 in W
+````
+
+In Python:
+
+```python
+if worker1 in W and worker2 in W:
+```
+
+This is the internal-edge condition.
+
+It must not be confused with the fringe condition, which will require exactly one endpoint inside.
+
+---
+
+### New Module Dependency
+
+`skill_of(W)` needed only:
+
+```text
+WORKERS
+SKILL_VALUES
+```
+
+`internal_shift_count(W)` must inspect actual physical shift copies.
+
+Therefore `mock_primitives.py` now imports:
+
+```python
+from mock_instance import SHIFTS, SKILL_VALUES, WORKERS
+```
+
+`SHIFTS` is imported only once executable code genuinely requires it.
+
+---
+
+### Parallel Copies
+
+The fixed graph contains:
+
+```text
+s0 = (a,b)
+s1 = (a,b)
+```
+
+These have identical endpoints but are distinct physical shift copies.
+
+For:
+
+```text
+W = {a,b}
+```
+
+both are internal.
+
+The function scans the list:
+
+```text
+s0 → both endpoints inside → count +1
+s1 → both endpoints inside → count +1
+```
+
+so:
+
+[
+i({a,b})=2.
+]
+
+Multiplicity is handled correctly because `SHIFTS` preserved the two physical copies as separate list entries.
+
+The function does not need special parallel-edge logic.
+
+The correct representation already preserved the distinction.
+
+This gives a broader software principle:
+
+> An algorithm cannot recover distinctions that its data representation has already destroyed.
+
+---
+
+### Why the Shift ID Is Unused Here
+
+A shift tuple has:
+
+```text
+(shift_id, worker1, worker2)
+```
+
+but internal membership depends only on the endpoints.
+
+Therefore the loop can use:
+
+```python
+for _shift_id, worker1, worker2 in SHIFTS:
+```
+
+The leading underscore communicates that the shift ID is intentionally unpacked but unused by this function.
+
+Identity still exists in the representation even when a particular computation does not need it.
+
+---
+
+### Query Validation
+
+As with `skill_of(W)`, every worker supplied in `W` must belong to `WORKERS`.
+
+A query such as:
+
+```python
+internal_shift_count(frozenset({"b", "x"}))
+```
+
+should raise:
+
+```text
+ValueError: W contains unknown worker 'x'
+```
+
+The graph itself may be valid while a caller supplies an invalid query.
+
+Instance validation and query validation therefore remain separate contracts.
+
+---
+
+### Empty Crew
+
+The primitive does not reject:
+
+```text
+W = ∅
+```
+
+No physical shift can have both endpoints in the empty set, so:
+
+[
+i(\varnothing)=0.
+]
+
+The later admissibility predicate, not the primitive, will reject an empty crew from the optimization.
+
+---
+
+### Comments-First Algorithm
+
+```text
+1. Verify every worker in W belongs to WORKERS.
+
+2. Start:
+       count = 0
+
+3. Scan every physical shift copy:
+       (shift_id, worker1, worker2)
+
+4. Test:
+       worker1 in W AND worker2 in W
+
+5. If both endpoints are inside:
+       count += 1
+
+6. Return count.
+```
+
+The durable logical distinction is:
+
+```text
+internal shift
+→ BOTH endpoints inside
+→ AND
+```
+
+The next primitive will use:
+
+```text
+fringe shift
+→ EXACTLY ONE endpoint inside
+→ XOR
+```
+
+---
+
+### Hand-Derived Predictions
+
+#### Parallel pair
+
+```python
+internal_shift_count(frozenset({"a", "b"}))
+```
+
+Internal shifts:
+
+```text
+s0
+s1
+```
+
+Expected:
+
+```text
+2
+```
+
+#### Winning crew
+
+```python
+internal_shift_count(frozenset({"a", "b", "c"}))
+```
+
+Internal shifts:
+
+```text
+s0
+s1
+s2
+```
+
+Expected:
+
+```text
+3
+```
+
+#### Crew `{b,c}`
+
+Only:
+
+```text
+s2
+```
+
+is internal.
+
+Expected:
+
+```text
+1
+```
+
+#### Crew `{a,c}`
+
+No physical shift has both endpoints in the crew.
+
+Expected:
+
+```text
+0
+```
+
+#### Full worker set
+
+All four physical shifts are internal.
+
+Expected:
+
+```text
+4
+```
+
+#### Empty crew
+
+Expected:
+
+```text
+0
+```
+
+because no shift can lie entirely inside the empty set.
+
+---
+
+> **RULE TO BANK:** Internal membership is an `AND` condition: count a physical shift exactly when both endpoints belong to the crew. Parallel copies count separately because they remain separate objects in the stored shift list.
+
+````
+
+# COPY INTO `mock_primitives.py`
+
+```python
+# ==================================================================================================
+# MOCK EXIT 1 — MATHEMATICAL PRIMITIVES
+# ==================================================================================================
+#
+# PURPOSE:
+#
+# Implement the small mathematical quantities that later checker layers
+# will depend on.
+#
+#
+# THE THREE PRIMITIVES ARE:
+#
+#     1. skill_of(W)
+#     2. internal_shift_count(W)
+#     3. fringe(W)
+#
+# The module is being built and verified one primitive at a time.
+#
+#
+# RESPONSIBILITY BOUNDARY:
+#
+# These functions compute mathematical quantities associated with a crew W.
+#
+# They do NOT decide whether a candidate pair (W, S) is admissible.
+#
+# For example:
+#
+#     skill_of(empty crew) = 0
+#     internal_shift_count(empty crew) = 0
+#
+# even though the later admissibility predicate rejects an empty crew.
+#
+#
+# QUERY VALIDATION:
+#
+# validate_instance() protects the STORED instance.
+#
+# These primitives separately reject query crews containing workers
+# outside WORKERS.
+#
+# ==================================================================================================
+
+
+from mock_instance import SHIFTS, SKILL_VALUES, WORKERS
+
+
+# ==================================================================================================
+# PRIMITIVE 1 — skill_of(W)
+# ==================================================================================================
+#
+# MATHEMATICAL DEFINITION:
+#
+#     skill(W) = sum of skill(w) over every worker w in W
+#
+#
+# INPUT:
+#
+#     W
+#
+# A collection of workers.
+#
+#
+# OUTPUT:
+#
+#     an integer equal to skill(W)
+#
+#
+# QUERY CONTRACT:
+#
+# Every worker supplied in W must belong to:
+#
+#     WORKERS
+#
+# Example invalid query:
+#
+#     W = {"a", "x"}
+#
+# should raise:
+#
+#     ValueError: W contains unknown worker 'x'
+#
+#
+# EMPTY-CREW BEHAVIOR:
+#
+#     skill(empty set) = 0
+#
+# The primitive does not enforce the later admissibility requirement
+# that W be nonempty.
+#
+#
+# COMMENTS-FIRST ALGORITHM:
+#
+# 1. Start:
+#
+#        total = 0
+#
+# 2. For every worker in W:
+#
+#        verify worker belongs to WORKERS
+#
+#        if not:
+#            raise ValueError naming that worker
+#
+#        otherwise:
+#            add SKILL_VALUES[worker] to total
+#
+# 3. Return total.
+#
+#
+# HAND-DERIVED PREDICTIONS:
+#
+#     skill_of({"a", "b", "c"}) = 4
+#
+#     skill_of({"b", "d"}) = 3
+#
+#     skill_of(WORKERS) = 6
+#
+#     skill_of(empty set) = 0
+#
+# ==================================================================================================
+
+
+def skill_of(W):
+    total = 0
+
+    for worker in W:
+        if worker not in WORKERS:
+            raise ValueError(f"W contains unknown worker {worker!r}")
+
+        total += SKILL_VALUES[worker]
+
+    return total
+
+
+# ==================================================================================================
+# PRIMITIVE 2 — internal_shift_count(W)
+# ==================================================================================================
+#
+# MATHEMATICAL DEFINITION:
+#
+#     i(W)
+#
+# is the number of PHYSICAL SHIFT COPIES whose two endpoints both belong
+# to W.
+#
+#
+# INTERNAL-SHIFT CONDITION:
+#
+# For a physical shift:
+#
+#     (shift_id, worker1, worker2)
+#
+# the shift is internal exactly when:
+#
+#     worker1 in W
+#
+# AND:
+#
+#     worker2 in W
+#
+# In Python:
+#
+#     worker1 in W and worker2 in W
+#
+#
+# MULTIGRAPH / PARALLEL-COPY RULE:
+#
+# Parallel shifts count separately.
+#
+# The fixed instance contains:
+#
+#     s0 = (a, b)
+#     s1 = (a, b)
+#
+# For:
+#
+#     W = {a, b}
+#
+# both physical copies are internal.
+#
+# Therefore:
+#
+#     i({a,b}) = 2
+#
+# This happens naturally because SHIFTS stores s0 and s1 as separate
+# list entries and this function scans every entry.
+#
+#
+# SHIFT-ID FIELD:
+#
+# Internal membership depends on the endpoints rather than the shift ID.
+#
+# The loop therefore names the first tuple field:
+#
+#     _shift_id
+#
+# The leading underscore communicates:
+#
+#     this field exists and is intentionally unused in this function.
+#
+#
+# QUERY CONTRACT:
+#
+# Every worker supplied in W must belong to WORKERS.
+#
+# Example:
+#
+#     W = {"b", "x"}
+#
+# should raise:
+#
+#     ValueError: W contains unknown worker 'x'
+#
+#
+# EMPTY-CREW BEHAVIOR:
+#
+# No shift can have both endpoints in the empty set.
+#
+# Therefore:
+#
+#     i(empty set) = 0
+#
+# The later admissibility predicate is responsible for rejecting an
+# empty crew from the optimization problem.
+#
+#
+# COMMENTS-FIRST ALGORITHM:
+#
+# 1. Verify every worker in W belongs to WORKERS.
+#
+# 2. Start:
+#
+#        count = 0
+#
+# 3. Scan every physical shift copy:
+#
+#        (shift_id, worker1, worker2)
+#
+# 4. Ask:
+#
+#        worker1 in W AND worker2 in W ?
+#
+# 5. If yes:
+#
+#        count += 1
+#
+# 6. Otherwise:
+#
+#        do nothing
+#
+# 7. Return count.
+#
+#
+# HAND-DERIVED PREDICTIONS:
+#
+#     internal_shift_count({"a", "b"})
+#
+#         s0 and s1 are internal
+#
+#         = 2
+#
+#
+#     internal_shift_count({"a", "b", "c"})
+#
+#         s0, s1, and s2 are internal
+#
+#         = 3
+#
+#
+#     internal_shift_count({"b", "c"})
+#
+#         only s2 is internal
+#
+#         = 1
+#
+#
+#     internal_shift_count({"a", "c"})
+#
+#         no physical shift has both endpoints inside
+#
+#         = 0
+#
+#
+#     internal_shift_count(WORKERS)
+#
+#         all four physical shifts are internal
+#
+#         = 4
+#
+#
+#     internal_shift_count(empty set)
+#
+#         = 0
+#
+# ==================================================================================================
+
+
+def internal_shift_count(W):
+    for worker in W:
+        if worker not in WORKERS:
+            raise ValueError(f"W contains unknown worker {worker!r}")
+
+    count = 0
+
+    for _shift_id, worker1, worker2 in SHIFTS:
+        if worker1 in W and worker2 in W:
+            count += 1
+
+    return count
+````
+
+Run the predictions now and paste the outputs. Then we will add **Primitive 3: `fringe(W)`**, where the key logical move changes from **AND** to **XOR** and where the return representation becomes a design decision because the future `S` enumeration inherits it.
+
+==================================================================================================================================================================
+
+Perfect. Every prediction for `internal_shift_count(W)` matched, including the bad-query rejection:
+
+```text
+i({a,b})       = 2   ✓
+i({a,b,c})     = 3   ✓
+i({b,c})       = 1   ✓
+i({a,c})       = 0   ✓
+i(WORKERS)     = 4   ✓
+i(∅)           = 0   ✓
+unknown "x"    → ValueError ✓
+```
+
+So Primitive 2 is behaving exactly like the hand oracle.
+
+Now we build **Primitive 3: `fringe(W)`**. This completes `mock_primitives.py`.
+
+# Step 3C — `fringe(W)`
+
+## 1. What quantity are we computing?
+
+For a crew (W), the fringe
+
+[
+\partial(W)
+]
+
+is the collection of **physical shift copies with exactly one worker inside (W)**.
+
+That phrase **exactly one** is the entire definition.
+
+Take a physical shift:
+
+```text
+(shift_id, worker1, worker2)
+```
+
+There are four possible membership patterns:
+
+```text
+worker1 in W    worker2 in W
+
+True            True
+False           False
+True            False
+False           True
+```
+
+Only the last two are fringe cases:
+
+```text
+True  / False
+False / True
+```
+
+because exactly one endpoint belongs to the crew.
+
+---
+
+# 2. Contrast Internal With Fringe
+
+This is worth locking firmly because these two primitives scan the **same shifts** but ask different logical questions.
+
+For an internal shift:
+
+```python
+worker1 in W and worker2 in W
+```
+
+That is:
+
+> both endpoints are inside.
+
+For a fringe shift:
+
+```python
+(worker1 in W) != (worker2 in W)
+```
+
+That is:
+
+> the two membership results differ.
+
+Boolean inequality is functioning as **exclusive OR**, or XOR.
+
+So:
+
+```text
+INTERNAL
+both inside
+True AND True
+→ count it
+
+FRINGE
+exactly one inside
+True XOR False
+or
+False XOR True
+→ collect it
+```
+
+---
+
+# 3. Why `(worker1 in W) != (worker2 in W)` Works
+
+Suppose:
+
+```python
+worker1_inside = worker1 in W
+worker2_inside = worker2 in W
+```
+
+Then Python Boolean inequality gives:
+
+```text
+True  != True   → False
+False != False  → False
+
+True  != False  → True
+False != True   → True
+```
+
+Translate that back into graph language:
+
+```text
+both inside
+→ False
+→ not fringe
+
+both outside
+→ False
+→ not fringe
+
+first inside, second outside
+→ True
+→ fringe
+
+first outside, second inside
+→ True
+→ fringe
+```
+
+That is exactly the mathematical definition.
+
+So the clean implementation is:
+
+```python
+if (worker1 in W) != (worker2 in W):
+```
+
+---
+
+# 4. The Important Design Question — What Does `fringe(W)` Return?
+
+Unlike:
+
+```python
+skill_of(W)
+```
+
+which returns one integer, and:
+
+```python
+internal_shift_count(W)
+```
+
+which returns one integer, `fringe(W)` returns a **collection of shifts**.
+
+We need to choose its representation carefully because downstream code will inherit that choice.
+
+The two important consumers are:
+
+```text
+is_admissible(W, S)
+```
+
+and:
+
+```text
+find_max_density()
+```
+
+The search will need to generate every subset:
+
+[
+S\subseteq\partial(W).
+]
+
+Our final result contract expects:
+
+```python
+result.S
+```
+
+to look like:
+
+```python
+frozenset({"s0", "s1"})
+```
+
+or, for the winner:
+
+```python
+frozenset()
+```
+
+So I would have `fringe(W)` return:
+
+```python
+list[str]
+```
+
+conceptually—a **list of shift IDs**.
+
+For example:
+
+```python
+["s0", "s1", "s2"]
+```
+
+---
+
+# 5. Why Return IDs Instead of Full Shift Tuples?
+
+We could return:
+
+```python
+[
+    ("s0", "a", "b"),
+    ("s1", "a", "b"),
+    ("s2", "b", "c"),
+]
+```
+
+That would preserve identity.
+
+But the future candidate (S) is defined in our code as a collection of **shift IDs**.
+
+The evaluator only needs:
+
+[
+|S|,
+]
+
+not the endpoints of the selected fringe shifts.
+
+The admissibility predicate needs to ask:
+
+> Is every ID in `S` one of the IDs returned by `fringe(W)`?
+
+So returning IDs aligns directly with the downstream representation.
+
+The full shift triples are needed only **inside `fringe()` to decide whether an edge crosses**.
+
+Once that decision is made, the ID is sufficient.
+
+---
+
+# 6. Why Return a List Instead of a Set?
+
+This is a subtle but important search-design decision.
+
+Mathematically, the fringe is a set.
+
+So why not return:
+
+```python
+{"s0", "s1", "s2"}
+```
+
+?
+
+Because our later exhaustive search needs **deterministic enumeration**.
+
+`SHIFTS` has a stable list order:
+
+```text
+s0
+s1
+s2
+s3
+```
+
+If `fringe(W)` walks `SHIFTS` in that order and appends matching IDs to a list, then the result preserves that stable order.
+
+Example:
+
+```python
+fringe({"b"})
+```
+
+will return:
+
+```python
+["s0", "s1", "s2"]
+```
+
+in that order.
+
+Later:
+
+```python
+itertools.combinations(fringe_edges, r)
+```
+
+preserves its input order.
+
+That gives us deterministic subset enumeration.
+
+This matters because the search contract says:
+
+> If two candidates tie, the first encountered wins.
+
+"First" only has a reliable meaning if the enumeration order is deterministic.
+
+So the chain is:
+
+```text
+SHIFTS stored in stable list order
+        ↓
+fringe(W) returns IDs in that same list order
+        ↓
+itertools.combinations respects input order
+        ↓
+S enumeration deterministic
+        ↓
+"first maximizer wins" has a stable meaning
+```
+
+This is exactly the kind of design consequence we want to notice **before** writing the search.
+
+---
+
+# 7. Parallel Copies Still Survive
+
+Consider:
+
+[
+W={b}.
+]
+
+The shifts are:
+
+```text
+s0 = (a,b)
+s1 = (a,b)
+s2 = (b,c)
+s3 = (c,d)
+```
+
+For `s0`:
+
+```text
+a outside
+b inside
+→ fringe
+```
+
+For `s1`:
+
+```text
+a outside
+b inside
+→ fringe
+```
+
+Even though those endpoints are identical, the IDs are different.
+
+So the returned list contains both:
+
+```python
+["s0", "s1", "s2"]
+```
+
+not:
+
+```python
+["s0", "s2"]
+```
+
+and not:
+
+```python
+[("a", "b"), ("b", "c")]
+```
+
+This is why we validated unique shift IDs in `mock_instance.py`.
+
+The representation contract now fits together:
+
+```text
+physical copy
+→ unique shift ID
+→ fringe returns ID
+→ S stores ID
+→ |S| counts physical selected shifts correctly
+```
+
+---
+
+# 8. Query Contract
+
+Same as the other primitives.
+
+If somebody calls:
+
+```python
+fringe(frozenset({"a", "x"}))
+```
+
+we should not silently treat `"x"` as an irrelevant outside worker.
+
+That would be mathematically misleading.
+
+The requested crew itself is invalid because it contains something outside:
+
+```python
+WORKERS
+```
+
+So:
+
+```text
+ValueError: W contains unknown worker 'x'
+```
+
+Again:
+
+```text
+bad stored graph
+→ validate_instance()
+
+bad primitive query
+→ primitive raises
+
+well-formed but inadmissible candidate
+→ later predicate returns False
+```
+
+Those are three different contracts.
+
+---
+
+# 9. Empty Crew Behavior
+
+What is:
+
+[
+\partial(\varnothing)?
+]
+
+For a shift to be fringe, exactly one endpoint would have to lie in the empty set.
+
+But **nothing** lies in the empty set.
+
+For every physical shift:
+
+```text
+worker1 in ∅ → False
+worker2 in ∅ → False
+
+False != False → False
+```
+
+Therefore:
+
+[
+\partial(\varnothing)=\varnothing.
+]
+
+In our Python representation:
+
+```python
+fringe(frozenset())
+```
+
+should return:
+
+```python
+[]
+```
+
+Again, the primitive computes a legitimate mathematical quantity even though empty (W) will later fail admissibility Condition 1.
+
+---
+
+# 10. Predictions From the Oracle
+
+Now the important part: predict before running.
+
+## Prediction 1 — `{a,b}`
+
+```python
+fringe(frozenset({"a", "b"}))
+```
+
+Inspect:
+
+```text
+s0 = (a,b)
+both inside
+→ not fringe
+
+s1 = (a,b)
+both inside
+→ not fringe
+
+s2 = (b,c)
+b inside, c outside
+→ fringe
+
+s3 = (c,d)
+both outside
+→ not fringe
+```
+
+Prediction:
+
+```python
+["s2"]
+```
+
+---
+
+## Prediction 2 — `{b}`
+
+```python
+fringe(frozenset({"b"}))
+```
+
+Inspect:
+
+```text
+s0 = (a,b)
+one inside
+→ fringe
+
+s1 = (a,b)
+one inside
+→ fringe
+
+s2 = (b,c)
+one inside
+→ fringe
+
+s3 = (c,d)
+both outside
+→ not fringe
+```
+
+Prediction:
+
+```python
+["s0", "s1", "s2"]
+```
+
+This is a key parallel-copy test.
+
+---
+
+## Prediction 3 — `{a,c}`
+
+```python
+fringe(frozenset({"a", "c"}))
+```
+
+Check all four:
+
+```text
+s0 = (a,b)
+a inside, b outside
+→ fringe
+
+s1 = (a,b)
+a inside, b outside
+→ fringe
+
+s2 = (b,c)
+b outside, c inside
+→ fringe
+
+s3 = (c,d)
+c inside, d outside
+→ fringe
+```
+
+Every shift crosses.
+
+Prediction:
+
+```python
+["s0", "s1", "s2", "s3"]
+```
+
+---
+
+## Prediction 4 — Winning Crew `{a,b,c}`
+
+```python
+fringe(frozenset({"a", "b", "c"}))
+```
+
+We derived:
+
+```text
+s0 → internal
+s1 → internal
+s2 → internal
+s3 → crosses from c to d
+```
+
+Prediction:
+
+```python
+["s3"]
+```
+
+This will later force the winning crew's only two possible `S` candidates to be:
+
+```python
+frozenset()
+```
+
+and:
+
+```python
+frozenset({"s3"})
+```
+
+---
+
+## Prediction 5 — `{b,c,d}`
+
+```python
+fringe(frozenset({"b", "c", "d"}))
+```
+
+Here `a` is the only outside worker.
+
+Both parallel `a-b` shifts cross:
+
+```text
+s0 → fringe
+s1 → fringe
+```
+
+while:
+
+```text
+s2 = (b,c) → both inside
+s3 = (c,d) → both inside
+```
+
+Prediction:
+
+```python
+["s0", "s1"]
+```
+
+---
+
+## Prediction 6 — Full Worker Set
+
+```python
+fringe(WORKERS)
+```
+
+Every worker is inside.
+
+Therefore every shift has both endpoints inside.
+
+Prediction:
+
+```python
+[]
+```
+
+or mathematically:
+
+[
+\partial(WORKERS)=\varnothing.
+]
+
+---
+
+## Prediction 7 — Empty Crew
+
+```python
+fringe(frozenset())
+```
+
+Neither endpoint of any shift belongs to the empty crew.
+
+Prediction:
+
+```python
+[]
+```
+
+Notice:
+
+```text
+fringe(∅) = []
+fringe(WORKERS) = []
+```
+
+but for completely different reasons:
+
+```text
+empty crew:
+both endpoints outside every time
+
+whole crew:
+both endpoints inside every time
+```
+
+In neither case does **exactly one** endpoint lie inside.
+
+---
+
+# 11. Comments-First Algorithm
+
+The function is:
+
+```text
+INPUT:
+    crew W
+
+1. Verify every worker in W belongs to WORKERS.
+
+2. Start:
+       crossing_shift_ids = []
+
+3. Scan SHIFTS in stable order.
+
+4. For each:
+       (shift_id, worker1, worker2)
+
+   evaluate:
+       (worker1 in W) != (worker2 in W)
+
+5. If True:
+       append shift_id
+
+6. If False:
+       do nothing
+
+7. Return crossing_shift_ids.
+```
+
+That is all the executable logic.
+
+But because of our representation decisions, that little function also establishes the stable edge-ID sequence from which later (S)-subsets will be generated.
+
+---
+
+# 12. Run These After Updating `mock_primitives.py`
+
+Paste the complete updated file below and save it.
+
+Then run:
+
+```bash
+python -c 'from mock_primitives import fringe; print(fringe(frozenset({"a", "b"})))'
+```
+
+Expected:
+
+```text
+['s2']
+```
+
+Then:
+
+```bash
+python -c 'from mock_primitives import fringe; print(fringe(frozenset({"b"})))'
+```
+
+Expected:
+
+```text
+['s0', 's1', 's2']
+```
+
+Then:
+
+```bash
+python -c 'from mock_primitives import fringe; print(fringe(frozenset({"a", "c"})))'
+```
+
+Expected:
+
+```text
+['s0', 's1', 's2', 's3']
+```
+
+Then:
+
+```bash
+python -c 'from mock_primitives import fringe; print(fringe(frozenset({"a", "b", "c"})))'
+```
+
+Expected:
+
+```text
+['s3']
+```
+
+Then:
+
+```bash
+python -c 'from mock_primitives import fringe; print(fringe(frozenset({"b", "c", "d"})))'
+```
+
+Expected:
+
+```text
+['s0', 's1']
+```
+
+Then:
+
+```bash
+python -c 'from mock_instance import WORKERS; from mock_primitives import fringe; print(fringe(WORKERS))'
+```
+
+Expected:
+
+```text
+[]
+```
+
+Then:
+
+```bash
+python -c 'from mock_primitives import fringe; print(fringe(frozenset()))'
+```
+
+Expected:
+
+```text
+[]
+```
+
+Finally test the query contract:
+
+```bash
+python -c 'from mock_primitives import fringe; fringe(frozenset({"c", "x"}))'
+```
+
+Expected final line:
+
+```text
+ValueError: W contains unknown worker 'x'
+```
+
+---
+
+# 13. After the Predictions Pass
+
+Once those all match, we will close the primitive module with:
+
+```bash
+python mock_primitives.py
+```
+
+Prediction: silent.
+
+Then:
+
+```bash
+ruff check mock_primitives.py
+```
+
+Prediction:
+
+```text
+All checks passed!
+```
+
+Then we will commit:
+
+```bash
+git add mock_primitives.py
+git commit -m "mock1: add crew-assignment mathematical primitives"
+```
+
+and separately commit your accumulated notes:
+
+```bash
+git add mock_notes_1.md
+git commit -m "mock1: document primitive design and oracle checks"
+```
+
+But **do not commit yet**. First run the fringe predictions and bring me the outputs.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Step 3C — Primitive 3: `fringe(W)`
+
+The third mathematical primitive computes:
+
+\[
+\partial(W),
+\]
+
+the collection of physical shift copies having **exactly one endpoint inside crew \(W\)**.
+
+This completes the three primitive quantities used throughout the Crew-Assignment Density problem:
+
+```text
+skill(W)
+i(W)
+∂(W)
+````
+
+---
+
+### Internal Versus Fringe Logic
+
+The internal-shift condition is:
+
+```text
+both endpoints inside
+```
+
+which corresponds to:
+
+```python
+worker1 in W and worker2 in W
+```
+
+The fringe condition is different:
+
+```text
+exactly one endpoint inside
+```
+
+which corresponds to:
+
+```python
+(worker1 in W) != (worker2 in W)
+```
+
+Boolean inequality acts as XOR.
+
+The truth table is:
+
+```text
+worker1 in W    worker2 in W    != result    classification
+
+True            True            False        both inside
+False           False           False        both outside
+True            False           True         fringe
+False           True            True         fringe
+```
+
+Therefore:
+
+```text
+internal shift
+→ AND
+
+fringe shift
+→ XOR
+```
+
+---
+
+### Return Representation
+
+`fringe(W)` returns a **list of shift IDs**.
+
+Example:
+
+```python
+["s0", "s1", "s2"]
+```
+
+rather than full tuples such as:
+
+```python
+[
+    ("s0", "a", "b"),
+    ("s1", "a", "b"),
+    ("s2", "b", "c"),
+]
+```
+
+The full tuples are needed inside `fringe()` to determine whether each shift crosses the crew boundary.
+
+After that decision, downstream code needs the physical shift identity, which is already supplied by the shift ID.
+
+This representation aligns with the future candidate:
+
+```text
+S = set of shift IDs
+```
+
+and with the final search result field:
+
+```python
+result.S
+```
+
+---
+
+### Why the Return Type Is a List
+
+Mathematically the fringe is a set, but the implementation returns its shift IDs in a list because the stored `SHIFTS` list has stable order.
+
+The chain is:
+
+```text
+SHIFTS stable list order
+        ↓
+fringe(W) scans in that order
+        ↓
+matching IDs are appended in that order
+        ↓
+itertools.combinations later preserves input order
+        ↓
+S-subset enumeration is deterministic
+```
+
+This matters because the search contract says:
+
+> When several candidates tie, the first encountered maximizer wins.
+
+A deterministic tie rule requires deterministic enumeration.
+
+Thus the list representation is not arbitrary. It preserves a useful ordering contract for the future exhaustive search.
+
+---
+
+### Parallel Shift Copies Remain Distinct
+
+For:
+
+[
+W={b},
+]
+
+the fringe contains:
+
+```text
+s0 = (a,b)
+s1 = (a,b)
+s2 = (b,c)
+```
+
+so:
+
+```python
+fringe(frozenset({"b"}))
+```
+
+must return:
+
+```python
+["s0", "s1", "s2"]
+```
+
+Both parallel copies survive because their IDs are distinct.
+
+This connects directly to the unique-shift-ID invariant in `mock_instance.py`.
+
+The representation chain is:
+
+```text
+physical shift copy
+→ unique shift ID
+→ fringe returns ID
+→ candidate S stores ID
+→ len(S) correctly counts selected physical copies
+```
+
+---
+
+### Query Contract
+
+As with the other primitives, every worker supplied in `W` must belong to `WORKERS`.
+
+For example:
+
+```python
+fringe(frozenset({"c", "x"}))
+```
+
+should raise:
+
+```text
+ValueError: W contains unknown worker 'x'
+```
+
+The fixed graph may be valid while a caller submits an invalid crew.
+
+---
+
+### Empty-Crew Behavior
+
+For:
+
+[
+W=\varnothing,
+]
+
+no endpoint of any shift is inside.
+
+Thus every shift has the membership pattern:
+
+```text
+False, False
+```
+
+and:
+
+```text
+False != False
+→ False
+```
+
+Therefore:
+
+[
+\partial(\varnothing)=\varnothing.
+]
+
+The Python result should be:
+
+```python
+[]
+```
+
+This does not make the empty crew admissible.
+
+The primitive computes the mathematical fringe; the later admissibility predicate rejects empty crews.
+
+---
+
+### Full-Crew Behavior
+
+For:
+
+[
+W=WORKERS,
+]
+
+every endpoint of every shift is inside.
+
+Thus every shift has:
+
+```text
+True, True
+```
+
+and:
+
+```text
+True != True
+→ False
+```
+
+Therefore:
+
+[
+\partial(WORKERS)=\varnothing.
+]
+
+Again the Python result is:
+
+```python
+[]
+```
+
+The empty and full crews therefore both have empty fringe, but for opposite structural reasons:
+
+```text
+W = ∅
+→ every shift has both endpoints outside
+
+W = WORKERS
+→ every shift has both endpoints inside
+```
+
+In neither situation does exactly one endpoint lie inside.
+
+---
+
+### Comments-First Algorithm
+
+```text
+1. Verify every worker in W belongs to WORKERS.
+
+2. Start:
+       crossing_shift_ids = []
+
+3. Scan every physical shift copy in SHIFTS.
+
+4. For each shift, test:
+
+       (worker1 in W) != (worker2 in W)
+
+5. If True:
+       append shift_id
+
+6. Return crossing_shift_ids.
+```
+
+---
+
+### Hand-Derived Predictions
+
+#### Crew `{a,b}`
+
+Only `s2` crosses:
+
+```python
+fringe(frozenset({"a", "b"}))
+```
+
+Expected:
+
+```python
+["s2"]
+```
+
+#### Singleton `{b}`
+
+The parallel `a-b` shifts and `b-c` all cross:
+
+```python
+fringe(frozenset({"b"}))
+```
+
+Expected:
+
+```python
+["s0", "s1", "s2"]
+```
+
+#### Crew `{a,c}`
+
+Every physical shift crosses:
+
+```python
+fringe(frozenset({"a", "c"}))
+```
+
+Expected:
+
+```python
+["s0", "s1", "s2", "s3"]
+```
+
+#### Winning crew `{a,b,c}`
+
+Only `s3 = (c,d)` crosses:
+
+```python
+fringe(frozenset({"a", "b", "c"}))
+```
+
+Expected:
+
+```python
+["s3"]
+```
+
+#### Crew `{b,c,d}`
+
+Only the parallel `a-b` copies cross:
+
+```python
+fringe(frozenset({"b", "c", "d"}))
+```
+
+Expected:
+
+```python
+["s0", "s1"]
+```
+
+#### Full worker set
+
+```python
+fringe(WORKERS)
+```
+
+Expected:
+
+```python
+[]
+```
+
+#### Empty crew
+
+```python
+fringe(frozenset())
+```
+
+Expected:
+
+```python
+[]
+```
+
+---
+
+> **RULE TO BANK:** Fringe membership is an XOR condition: exactly one endpoint lies in the crew. Return physical shift IDs in stable list order so parallel identity survives and later subset enumeration remains deterministic.
+
+````
+
+# COPY INTO `mock_primitives.py`
+
+```python
+# ==================================================================================================
+# MOCK EXIT 1 — MATHEMATICAL PRIMITIVES
+# ==================================================================================================
+#
+# PURPOSE:
+#
+# Implement the small mathematical quantities that later checker layers
+# depend on.
+#
+#
+# THE THREE PRIMITIVES ARE:
+#
+#     1. skill_of(W)
+#     2. internal_shift_count(W)
+#     3. fringe(W)
+#
+#
+# RESPONSIBILITY BOUNDARY:
+#
+# These functions compute mathematical quantities associated with a crew W.
+#
+# They do NOT decide whether a candidate pair (W, S) is admissible.
+#
+# For example:
+#
+#     skill_of(empty crew) = 0
+#     internal_shift_count(empty crew) = 0
+#     fringe(empty crew) = []
+#
+# even though the later admissibility predicate rejects an empty crew.
+#
+#
+# QUERY VALIDATION:
+#
+# validate_instance() protects the STORED instance.
+#
+# These primitives separately reject query crews containing workers
+# outside WORKERS.
+#
+# ==================================================================================================
+
+
+from mock_instance import SHIFTS, SKILL_VALUES, WORKERS
+
+
+# ==================================================================================================
+# PRIMITIVE 1 — skill_of(W)
+# ==================================================================================================
+#
+# MATHEMATICAL DEFINITION:
+#
+#     skill(W) = sum of skill(w) over every worker w in W
+#
+#
+# INPUT:
+#
+#     W
+#
+# A collection of workers.
+#
+#
+# OUTPUT:
+#
+#     an integer equal to skill(W)
+#
+#
+# QUERY CONTRACT:
+#
+# Every worker supplied in W must belong to WORKERS.
+#
+# Example invalid query:
+#
+#     W = {"a", "x"}
+#
+# should raise:
+#
+#     ValueError: W contains unknown worker 'x'
+#
+#
+# EMPTY-CREW BEHAVIOR:
+#
+#     skill(empty set) = 0
+#
+# The primitive does not enforce the later admissibility requirement
+# that W be nonempty.
+#
+#
+# COMMENTS-FIRST ALGORITHM:
+#
+# 1. Start:
+#
+#        total = 0
+#
+# 2. For every worker in W:
+#
+#        verify worker belongs to WORKERS
+#
+#        if not:
+#            raise ValueError naming that worker
+#
+#        otherwise:
+#            add SKILL_VALUES[worker] to total
+#
+# 3. Return total.
+#
+#
+# HAND-DERIVED PREDICTIONS:
+#
+#     skill_of({"a", "b", "c"}) = 4
+#
+#     skill_of({"b", "d"}) = 3
+#
+#     skill_of(WORKERS) = 6
+#
+#     skill_of(empty set) = 0
+#
+# ==================================================================================================
+
+
+def skill_of(W):
+    total = 0
+
+    for worker in W:
+        if worker not in WORKERS:
+            raise ValueError(f"W contains unknown worker {worker!r}")
+
+        total += SKILL_VALUES[worker]
+
+    return total
+
+
+# ==================================================================================================
+# PRIMITIVE 2 — internal_shift_count(W)
+# ==================================================================================================
+#
+# MATHEMATICAL DEFINITION:
+#
+#     i(W)
+#
+# is the number of PHYSICAL SHIFT COPIES whose two endpoints both belong
+# to W.
+#
+#
+# INTERNAL-SHIFT CONDITION:
+#
+# For a physical shift:
+#
+#     (shift_id, worker1, worker2)
+#
+# the shift is internal exactly when:
+#
+#     worker1 in W
+#
+# AND:
+#
+#     worker2 in W
+#
+# In Python:
+#
+#     worker1 in W and worker2 in W
+#
+#
+# MULTIGRAPH / PARALLEL-COPY RULE:
+#
+# Parallel shifts count separately.
+#
+# The fixed instance contains:
+#
+#     s0 = (a, b)
+#     s1 = (a, b)
+#
+# For:
+#
+#     W = {a, b}
+#
+# both physical copies are internal.
+#
+# Therefore:
+#
+#     i({a,b}) = 2
+#
+# This happens naturally because SHIFTS stores s0 and s1 as separate
+# list entries and this function scans every entry.
+#
+#
+# SHIFT-ID FIELD:
+#
+# Internal membership depends on the endpoints rather than the shift ID.
+#
+# The loop therefore names the first tuple field:
+#
+#     _shift_id
+#
+# The leading underscore communicates that the field exists but is
+# intentionally unused in this computation.
+#
+#
+# QUERY CONTRACT:
+#
+# Every worker supplied in W must belong to WORKERS.
+#
+#
+# EMPTY-CREW BEHAVIOR:
+#
+# No shift can have both endpoints in the empty set.
+#
+# Therefore:
+#
+#     i(empty set) = 0
+#
+#
+# COMMENTS-FIRST ALGORITHM:
+#
+# 1. Verify every worker in W belongs to WORKERS.
+#
+# 2. Start:
+#
+#        count = 0
+#
+# 3. Scan every physical shift copy:
+#
+#        (shift_id, worker1, worker2)
+#
+# 4. Ask:
+#
+#        worker1 in W AND worker2 in W ?
+#
+# 5. If yes:
+#
+#        count += 1
+#
+# 6. Return count.
+#
+#
+# HAND-DERIVED PREDICTIONS:
+#
+#     internal_shift_count({"a", "b"}) = 2
+#
+#     internal_shift_count({"a", "b", "c"}) = 3
+#
+#     internal_shift_count({"b", "c"}) = 1
+#
+#     internal_shift_count({"a", "c"}) = 0
+#
+#     internal_shift_count(WORKERS) = 4
+#
+#     internal_shift_count(empty set) = 0
+#
+# ==================================================================================================
+
+
+def internal_shift_count(W):
+    for worker in W:
+        if worker not in WORKERS:
+            raise ValueError(f"W contains unknown worker {worker!r}")
+
+    count = 0
+
+    for _shift_id, worker1, worker2 in SHIFTS:
+        if worker1 in W and worker2 in W:
+            count += 1
+
+    return count
+
+
+# ==================================================================================================
+# PRIMITIVE 3 — fringe(W)
+# ==================================================================================================
+#
+# MATHEMATICAL DEFINITION:
+#
+#     ∂(W)
+#
+# is the collection of PHYSICAL SHIFT COPIES having exactly one endpoint
+# inside W.
+#
+#
+# FRINGE CONDITION:
+#
+# For:
+#
+#     (shift_id, worker1, worker2)
+#
+# define the two membership statements:
+#
+#     worker1 in W
+#     worker2 in W
+#
+# A shift is on the fringe exactly when those two Boolean values differ.
+#
+# In Python:
+#
+#     (worker1 in W) != (worker2 in W)
+#
+#
+# BOOLEAN / XOR INTERPRETATION:
+#
+#     True  != True   -> False
+#     False != False  -> False
+#     True  != False  -> True
+#     False != True   -> True
+#
+# Therefore:
+#
+#     both inside   -> not fringe
+#     both outside  -> not fringe
+#     exactly one inside -> fringe
+#
+#
+# INTERNAL VERSUS FRINGE:
+#
+#     internal:
+#         both endpoints inside
+#         AND condition
+#
+#     fringe:
+#         exactly one endpoint inside
+#         XOR condition
+#
+#
+# RETURN REPRESENTATION:
+#
+# fringe(W) returns a LIST OF SHIFT IDs.
+#
+# Example:
+#
+#     ["s0", "s1", "s2"]
+#
+# rather than full:
+#
+#     (shift_id, worker1, worker2)
+#
+# triples.
+#
+#
+# WHY SHIFT IDs:
+#
+# The later candidate S is represented as a set of physical shift IDs.
+#
+# The future evaluator uses:
+#
+#     |S|
+#
+# rather than the selected shifts' endpoints.
+#
+# Returning IDs therefore aligns the primitive directly with the
+# downstream candidate representation.
+#
+#
+# WHY A LIST:
+#
+# SHIFTS has stable list order:
+#
+#     s0, s1, s2, s3
+#
+# fringe(W) scans that list in order and appends matching IDs.
+#
+# Therefore the returned fringe list inherits deterministic order.
+#
+# Later:
+#
+#     itertools.combinations(...)
+#
+# will preserve that input order while enumerating every subset S.
+#
+# This gives a deterministic search order, which is necessary for the
+# contract:
+#
+#     first encountered maximizer wins ties.
+#
+#
+# PARALLEL SHIFT COPIES:
+#
+# For:
+#
+#     W = {b}
+#
+# both:
+#
+#     s0 = (a,b)
+#     s1 = (a,b)
+#
+# are fringe shifts.
+#
+# Since their IDs are different, the result contains both:
+#
+#     ["s0", "s1", "s2"]
+#
+# Physical parallel-copy identity is therefore preserved.
+#
+#
+# QUERY CONTRACT:
+#
+# Every worker supplied in W must belong to WORKERS.
+#
+# Example invalid query:
+#
+#     W = {"c", "x"}
+#
+# should raise:
+#
+#     ValueError: W contains unknown worker 'x'
+#
+#
+# EMPTY-CREW BEHAVIOR:
+#
+# For the empty crew, every shift has both endpoints outside.
+#
+# Therefore:
+#
+#     fringe(empty set) = []
+#
+#
+# FULL-CREW BEHAVIOR:
+#
+# For W = WORKERS, every shift has both endpoints inside.
+#
+# Therefore:
+#
+#     fringe(WORKERS) = []
+#
+#
+# COMMENTS-FIRST ALGORITHM:
+#
+# 1. Verify every worker in W belongs to WORKERS.
+#
+# 2. Start:
+#
+#        crossing_shift_ids = []
+#
+# 3. Scan every physical shift copy in SHIFTS.
+#
+# 4. For each:
+#
+#        (shift_id, worker1, worker2)
+#
+#    evaluate:
+#
+#        (worker1 in W) != (worker2 in W)
+#
+# 5. If True:
+#
+#        append shift_id
+#
+# 6. Return crossing_shift_ids.
+#
+#
+# HAND-DERIVED PREDICTIONS:
+#
+#     fringe({"a", "b"})
+#
+#         = ["s2"]
+#
+#
+#     fringe({"b"})
+#
+#         = ["s0", "s1", "s2"]
+#
+#
+#     fringe({"a", "c"})
+#
+#         = ["s0", "s1", "s2", "s3"]
+#
+#
+#     fringe({"a", "b", "c"})
+#
+#         = ["s3"]
+#
+#
+#     fringe({"b", "c", "d"})
+#
+#         = ["s0", "s1"]
+#
+#
+#     fringe(WORKERS)
+#
+#         = []
+#
+#
+#     fringe(empty set)
+#
+#         = []
+#
+# ==================================================================================================
+
+
+def fringe(W):
+    for worker in W:
+        if worker not in WORKERS:
+            raise ValueError(f"W contains unknown worker {worker!r}")
+
+    crossing_shift_ids = []
+
+    for shift_id, worker1, worker2 in SHIFTS:
+        if (worker1 in W) != (worker2 in W):
+            crossing_shift_ids.append(shift_id)
+
+    return crossing_shift_ids
+````
+
+Run the seven passing predictions plus the bad-query case now. Then paste the outputs, and we’ll close and commit the primitive layer.
+
+==================================================================================================================================================================
+
+
+
+
+
