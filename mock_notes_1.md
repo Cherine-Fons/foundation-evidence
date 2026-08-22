@@ -21104,6 +21104,2966 @@ The next actions are only verification, Ruff if needed, and commits.
 ```
 ============================================================================================================================================================
 
+Excellent. The evaluator layer is fully closed and committed:
+
+```text
+c8eeffa  mock1: add exact crew-assignment evaluator
+d1cca36  mock1: document exact evaluator and caller contract
+working tree clean
+```
+
+You also proved something important rather than merely assuming it:
+
+```text
+inadmissible ({a,b}, ∅)
+→ denominator 0
+→ ZeroDivisionError if evaluator is called directly
+```
+
+That confirms why the search must maintain the contract:
+
+```text
+enumerate candidate
+→ test admissibility
+→ evaluate ONLY if True
+```
+
+Now we build the last implementation layer before the permanent test suite.
+
+# Step 6 — Exhaustive Search: `mock_search.py`
+
+This is where all the pieces finally get assembled.
+
+So far we have separately taught the program:
+
+```text
+mock_instance.py
+    What is the fixed graph?
+
+mock_primitives.py
+    What are skill(W), i(W), and ∂(W)?
+
+mock_admissibility.py
+    Which candidate pairs (W,S) are allowed?
+
+mock_evaluator.py
+    What exact value does an admissible pair have?
+```
+
+Now `mock_search.py` asks:
+
+> Examine **every possible candidate pair**, discard the inadmissible ones, evaluate every admissible one exactly, and return a maximizer.
+
+This is the executable version of the exhaustive hand audit in `MOCK_ORACLE.md`.
+
+---
+
+# 1. Create the Search File
+
+Your tree is clean, so create:
+
+```bash
+code mock_search.py
+```
+
+Confirm:
+
+```bash
+ls mock_search.py
+```
+
+Expected:
+
+```text
+mock_search.py
+```
+
+Do not commit yet.
+
+---
+
+# 2. What Exactly Must the Search Enumerate?
+
+A candidate is:
+
+[
+(W,S).
+]
+
+So there are **two nested subset choices**.
+
+First choose:
+
+[
+\varnothing\neq W\subseteq WORKERS.
+]
+
+Then, after (W) is fixed, compute:
+
+[
+\partial(W).
+]
+
+Then choose:
+
+[
+S\subseteq\partial(W).
+]
+
+So the search space has the structure:
+
+```text
+every nonempty W
+        ↓
+compute fringe(W)
+        ↓
+every S subset of that fringe
+        ↓
+candidate (W,S)
+```
+
+This is not:
+
+```text
+choose W
+choose any shift subset from the whole graph
+```
+
+because Condition 2 specifically restricts (S) to the fringe of the current (W).
+
+---
+
+# 3. Enumerating Every Crew `W`
+
+The fixed worker set is:
+
+```python
+WORKERS = frozenset({"a", "b", "c", "d"})
+```
+
+A `frozenset` is mathematically appropriate, but we should **not rely on its iteration order** for deterministic search.
+
+Our tie rule says:
+
+> First encountered maximizer wins.
+
+That means "first encountered" must have a stable meaning.
+
+So before enumerating crews:
+
+```python
+workers = sorted(WORKERS)
+```
+
+For our workers:
+
+```text
+["a", "b", "c", "d"]
+```
+
+Now enumeration has a deterministic starting order.
+
+---
+
+# 4. Why We Enumerate Sizes 1 Through 4
+
+There are four workers.
+
+A crew may have:
+
+```text
+1 worker
+2 workers
+3 workers
+4 workers
+```
+
+but not zero, because Condition 1 requires nonempty (W).
+
+So:
+
+```python
+for W_size in range(1, len(workers) + 1):
+```
+
+means:
+
+```text
+range(1, 5)
+→ 1, 2, 3, 4
+```
+
+Then:
+
+```python
+itertools.combinations(workers, W_size)
+```
+
+generates every worker subset of exactly that size.
+
+For `W_size = 2`, for example:
+
+```text
+("a", "b")
+("a", "c")
+("a", "d")
+("b", "c")
+("b", "d")
+("c", "d")
+```
+
+Exactly the six two-worker crews we audited by hand.
+
+---
+
+# 5. Why `combinations()` Is the Right Tool
+
+`itertools.combinations(items, r)` gives every unordered choice of (r) distinct items.
+
+That matches mathematical subsets.
+
+For:
+
+```text
+["a", "b", "c"]
+```
+
+the size-2 combinations are:
+
+```text
+("a", "b")
+("a", "c")
+("b", "c")
+```
+
+It does **not** separately generate:
+
+```text
+("b", "a")
+```
+
+because:
+
+[
+{a,b}={b,a}.
+]
+
+That prevents duplicate representations of the same mathematical crew.
+
+---
+
+# 6. Convert Each Crew Tuple to `frozenset`
+
+`combinations()` gives tuples:
+
+```python
+("a", "b", "c")
+```
+
+but mathematically (W) is a set.
+
+So immediately:
+
+```python
+W = frozenset(W_combo)
+```
+
+Now downstream functions receive the canonical crew representation we have been using throughout the mock.
+
+---
+
+# 7. Compute the Fringe Once Per Crew
+
+For each (W), do:
+
+```python
+fringe_shift_ids = fringe(W)
+```
+
+This should happen **outside the inner `S` loops**.
+
+Why?
+
+Because:
+
+[
+\partial(W)
+]
+
+depends only on (W).
+
+It does not change as we try different (S)'s.
+
+Bad structure:
+
+```text
+choose W
+    choose S
+        recompute fringe(W)
+```
+
+That repeats identical work for every `S`.
+
+Better:
+
+```text
+choose W
+    compute fringe(W) once
+    choose every S from that result
+```
+
+This is our first small efficiency decision, but more importantly it mirrors the mathematics cleanly.
+
+---
+
+# 8. Enumerating Every `S`
+
+Suppose:
+
+```python
+fringe_shift_ids = ["s0", "s1", "s2"]
+```
+
+Then (S) may contain:
+
+```text
+0 shifts
+1 shift
+2 shifts
+3 shifts
+```
+
+So:
+
+```python
+for S_size in range(len(fringe_shift_ids) + 1):
+```
+
+means:
+
+```text
+0, 1, 2, 3
+```
+
+Then:
+
+```python
+itertools.combinations(fringe_shift_ids, S_size)
+```
+
+generates every subset of that size.
+
+For three fringe shifts:
+
+```text
+size 0:
+()
+
+size 1:
+("s0",)
+("s1",)
+("s2",)
+
+size 2:
+("s0","s1")
+("s0","s2")
+("s1","s2")
+
+size 3:
+("s0","s1","s2")
+```
+
+Total:
+
+[
+1+3+3+1=8=2^3.
+]
+
+So no subset is omitted.
+
+---
+
+# 9. Why Size 0 Must Be Included
+
+This is extremely important in this mock because the **oracle winner uses an empty `S`**:
+
+[
+W^*={a,b,c},
+\qquad
+S^*=\varnothing.
+]
+
+If we accidentally wrote:
+
+```python
+range(1, len(fringe_shift_ids) + 1)
+```
+
+instead of:
+
+```python
+range(len(fringe_shift_ids) + 1)
+```
+
+we would omit the empty subset.
+
+Then the actual unique optimum would **never even enter the search**.
+
+The program could run perfectly and return the wrong answer.
+
+This is exactly the failure class exhaustive search must avoid:
+
+> not an arithmetic error, but an omitted part of the search space.
+
+---
+
+# 10. Convert `S` to `frozenset`
+
+Again, `combinations()` returns a tuple:
+
+```python
+("s0", "s1")
+```
+
+but mathematically (S) is a set.
+
+So:
+
+```python
+S = frozenset(S_combo)
+```
+
+The empty tuple:
+
+```python
+()
+```
+
+becomes:
+
+```python
+frozenset()
+```
+
+which is exactly the representation our oracle expects for the winner.
+
+---
+
+# 11. Why We Still Call `is_admissible()`
+
+You might notice:
+
+> But if `S` was generated from `fringe(W)`, hasn't Condition 2 already been guaranteed?
+
+Yes — for candidates generated internally by this search, Condition 2 will indeed hold automatically.
+
+And because the W enumeration starts at size 1 and uses `WORKERS`, Condition 1 also holds automatically.
+
+So why still call:
+
+```python
+is_admissible(W, S)
+```
+
+?
+
+Because that function is the authoritative implementation of **all four admissibility conditions**, particularly:
+
+```text
+parity
+lower bound
+```
+
+Using it keeps one source of truth.
+
+We do not want to reproduce pieces of admissibility logic inside search like:
+
+```python
+if (skill_of(W) + len(S)) % 2 ...
+```
+
+That would duplicate business/mathematical rules across modules.
+
+The clean architecture is:
+
+```text
+search generates structurally possible candidates
+        ↓
+is_admissible owns mathematical eligibility
+```
+
+---
+
+# 12. Only Evaluate After `True`
+
+This is the contract you just proved with `ZeroDivisionError`.
+
+The inner search must have:
+
+```python
+if not is_admissible(W, S):
+    continue
+```
+
+Only afterward:
+
+```python
+value = candidate_value(W, S)
+```
+
+This is not optional ordering.
+
+We know an inadmissible pair such as:
+
+```text
+W = {a,b}
+S = ∅
+```
+
+would make the evaluator attempt:
+
+```text
+Fraction(4, 0)
+```
+
+So the search must preserve:
+
+```text
+filter first
+evaluate second
+```
+
+---
+
+# 13. What Should the Search Return?
+
+The specification says:
+
+> Return the maximum value and a maximizing pair — value, W, S as named fields.
+
+So we need something with:
+
+```python
+result.value
+result.W
+result.S
+```
+
+From your earlier OOP/dataclass work, the stdlib construct that fits this is a **dataclass**.
+
+We use:
+
+```python
+from dataclasses import dataclass
+```
+
+and define:
+
+```python
+@dataclass(frozen=True)
+class SearchResult:
+    value: Fraction
+    W: frozenset[str] | None
+    S: frozenset[str] | None
+```
+
+---
+
+# 14. Why `@dataclass`
+
+Without a dataclass, we might return:
+
+```python
+(value, W, S)
+```
+
+and then access:
+
+```python
+result[0]
+result[1]
+result[2]
+```
+
+That works, but the positions carry no semantic name.
+
+A dataclass gives:
+
+```python
+result.value
+result.W
+result.S
+```
+
+which directly matches the result contract.
+
+---
+
+# 15. Why `frozen=True`
+
+Once a search result exists, it should behave like a completed record.
+
+We do not want later code accidentally doing something conceptually like:
+
+```python
+result.value = Fraction(999, 1)
+```
+
+So:
+
+```python
+@dataclass(frozen=True)
+```
+
+makes the record immutable.
+
+This is the same idea behind using `frozenset` for mathematical sets that should not mutate during evaluation.
+
+---
+
+# 16. Why the Result Allows `None`
+
+The specification has an explicit empty-family case:
+
+> If no admissible pair exists: value 0, W and S both `None`.
+
+So:
+
+```python
+W: frozenset[str] | None
+S: frozenset[str] | None
+```
+
+means:
+
+```text
+ordinary result:
+    W = frozenset(...)
+    S = frozenset(...)
+
+no admissible pair:
+    W = None
+    S = None
+```
+
+---
+
+# 17. Why `None`, Not Empty Sets, for the Empty Family
+
+Suppose no admissible pair exists.
+
+We should **not** return:
+
+```python
+W = frozenset()
+S = frozenset()
+```
+
+because that visually represents an actual candidate:
+
+[
+(\varnothing,\varnothing).
+]
+
+But that candidate is inadmissible.
+
+`None` communicates something different:
+
+```text
+there is no maximizing pair because there are no admissible candidates
+```
+
+So:
+
+```python
+SearchResult(
+    value=Fraction(0, 1),
+    W=None,
+    S=None,
+)
+```
+
+accurately represents the specified empty-family outcome.
+
+---
+
+# 18. The Best-Result Sentinel
+
+Internally, before the search has found anything, use:
+
+```python
+best = None
+```
+
+This means:
+
+> No admissible pair has been encountered yet.
+
+Why not initialize:
+
+```python
+best = SearchResult(
+    value=Fraction(0, 1),
+    W=None,
+    S=None,
+)
+```
+
+?
+
+Because the sentinel and an actual mathematical value should not be conflated.
+
+Imagine a general problem in which an admissible candidate itself has value 0.
+
+If we started with zero and updated only on strict improvement:
+
+```python
+if value > best.value:
+```
+
+then the first zero-valued admissible candidate would **not** replace the sentinel.
+
+We would finish with:
+
+```text
+value = 0
+W = None
+S = None
+```
+
+even though an admissible maximizing pair actually existed.
+
+Using:
+
+```python
+best = None
+```
+
+avoids that ambiguity.
+
+Then the first admissible candidate is always recorded.
+
+---
+
+# 19. Recording the First Admissible Pair
+
+After:
+
+```python
+value = candidate_value(W, S)
+```
+
+we ask:
+
+```python
+if best is None:
+```
+
+If yes, this is the first admissible pair encountered.
+
+So:
+
+```python
+best = SearchResult(
+    value=value,
+    W=W,
+    S=S,
+)
+```
+
+Then:
+
+```python
+continue
+```
+
+moves to the next candidate.
+
+---
+
+# 20. Comparing Later Candidates
+
+After a best candidate exists, compare:
+
+```python
+if value > best.value:
+```
+
+If strictly greater:
+
+```python
+best = SearchResult(...)
+```
+
+If equal:
+
+```text
+do nothing
+```
+
+This implements:
+
+> First encountered maximizer wins ties.
+
+---
+
+# 21. Why We Use `>` and Not `>=`
+
+Suppose:
+
+```text
+candidate A value = 3/2
+candidate B value = 3/2
+```
+
+and A appears first.
+
+With:
+
+```python
+if value > best.value:
+```
+
+B does not replace A.
+
+So A remains the result.
+
+With:
+
+```python
+if value >= best.value:
+```
+
+every equal-value candidate would replace the previous one.
+
+Then the **last** maximizer encountered would win.
+
+That violates the specification.
+
+So:
+
+```text
+first tie wins → >
+last tie wins  → >=
+```
+
+We require:
+
+```text
+>
+```
+
+---
+
+# 22. Why Search Order Is Deterministic
+
+Our deterministic chain is:
+
+```text
+WORKERS
+    ↓
+sorted(WORKERS)
+    ↓
+["a","b","c","d"]
+    ↓
+combinations preserves input order
+    ↓
+W order deterministic
+```
+
+For each W:
+
+```text
+SHIFTS stored s0,s1,s2,s3
+    ↓
+fringe(W) preserves SHIFTS order
+    ↓
+combinations preserves fringe order
+    ↓
+S order deterministic
+```
+
+So tie behavior is reproducible.
+
+---
+
+# 23. What Happens if No Admissible Pair Is Found?
+
+After all loops:
+
+```python
+if best is None:
+```
+
+then the admissible family was empty.
+
+Return:
+
+```python
+SearchResult(
+    value=Fraction(0, 1),
+    W=None,
+    S=None,
+)
+```
+
+Otherwise:
+
+```python
+return best
+```
+
+---
+
+# 24. Should Search Call `validate_instance()`?
+
+Our choice is **no**.
+
+The layering remains:
+
+```text
+instance lifecycle
+→ validate_instance()
+
+search query
+→ find_max_value()
+```
+
+The permanent pytest suite will include:
+
+```python
+def test_instance_is_valid():
+    validate_instance()
+```
+
+so any edit that breaks the fixed instance causes the test suite to fail.
+
+`find_max_value()` trusts the instance module's data.
+
+That prevents validation logic from being redundantly embedded inside every search call.
+
+---
+
+# 25. Before Running — Predict the Final Search Result
+
+Our entire oracle exists for this moment.
+
+We hand-derived:
+
+[
+W^*={a,b,c},
+]
+
+[
+S^*=\varnothing,
+]
+
+and:
+
+[
+value=3.
+]
+
+Therefore:
+
+```python
+result = find_max_value()
+```
+
+must satisfy:
+
+```python
+result.value == Fraction(3, 1)
+```
+
+```python
+result.W == frozenset({"a", "b", "c"})
+```
+
+```python
+result.S == frozenset()
+```
+
+and because the hand audit proved every other crew has best value at most 2, this is not merely a tie-rule artifact.
+
+The maximizing pair is genuinely unique.
+
+---
+
+# 26. Create the Complete Search File
+
+Paste the complete `mock_search.py` block at the end of this response.
+
+Then run:
+
+```bash
+python -c 'from mock_search import find_max_value; print(find_max_value())'
+```
+
+### Prediction
+
+A dataclass representation should look approximately:
+
+```text
+SearchResult(value=Fraction(3, 1), W=frozenset({'a', 'b', 'c'}), S=frozenset())
+```
+
+The exact printed order of elements inside the `frozenset` may vary:
+
+```text
+{'a', 'b', 'c'}
+```
+
+versus:
+
+```text
+{'b', 'a', 'c'}
+```
+
+That does **not** matter because set equality is order-independent.
+
+The important three fields are:
+
+```text
+value → Fraction(3, 1)
+W     → frozenset({"a","b","c"})
+S     → frozenset()
+```
+
+---
+
+# 27. Print the Fields Separately Too
+
+After that, run:
+
+```bash
+python -c 'from mock_search import find_max_value; r=find_max_value(); print(repr(r.value)); print(r.W); print(r.S)'
+```
+
+Prediction:
+
+```text
+Fraction(3, 1)
+frozenset({...a,b,c...})
+frozenset()
+```
+
+Again, W's displayed internal order may vary.
+
+---
+
+# 28. Do Not Commit Yet
+
+Once the search returns the oracle result, we will still:
+
+1. inspect a few enumeration facts;
+2. confirm module silence;
+3. run Ruff;
+4. rerun the oracle result after any Ruff rewrite;
+5. commit the search;
+6. commit the notes.
+
+Then we build `test_mock.py`.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Step 6 — Exhaustive Search
+
+The final implementation layer before permanent testing is:
+
+```text
+mock_search.py
+````
+
+Its job is to combine the previous modules into an exhaustive optimizer.
+
+The architecture is:
+
+```text
+every nonempty crew W
+        ↓
+compute fringe(W)
+        ↓
+every S subset of fringe(W)
+        ↓
+is_admissible(W,S)
+        ↓
+if False:
+    skip
+        ↓
+if True:
+    candidate_value(W,S)
+        ↓
+compare exact value with current best
+        ↓
+return maximizing result
+```
+
+This executable search mirrors the exhaustive hand audit already committed in `MOCK_ORACLE.md`.
+
+---
+
+## Two-Level Enumeration
+
+A candidate is a pair:
+
+[
+(W,S).
+]
+
+Therefore the search contains two nested subset enumerations.
+
+First:
+
+[
+\varnothing\neq W\subseteq WORKERS.
+]
+
+Then, for the chosen crew:
+
+[
+S\subseteq\partial(W).
+]
+
+The search must not enumerate `S` from all shifts indiscriminately.
+
+Its structural source is the current crew's fringe.
+
+---
+
+## Deterministic Worker Enumeration
+
+`WORKERS` is a `frozenset`.
+
+A mathematical set does not have a meaningful order, and its iteration order should not define the search's tie behavior.
+
+Therefore the search begins:
+
+```python
+workers = sorted(WORKERS)
+```
+
+For the fixed instance this yields:
+
+```text
+["a", "b", "c", "d"]
+```
+
+The worker combinations are therefore generated from a stable input sequence.
+
+---
+
+## Enumerating Every Nonempty Crew
+
+For four workers, possible crew cardinalities are:
+
+```text
+1
+2
+3
+4
+```
+
+so:
+
+```python
+for W_size in range(1, len(workers) + 1):
+```
+
+generates sizes `1` through `4`.
+
+For each size:
+
+```python
+itertools.combinations(workers, W_size)
+```
+
+generates every unordered subset of exactly that cardinality.
+
+For size 2:
+
+```text
+(a,b)
+(a,c)
+(a,d)
+(b,c)
+(b,d)
+(c,d)
+```
+
+which exactly matches the six two-worker cases in the oracle.
+
+Each generated tuple is converted to:
+
+```python
+W = frozenset(W_combo)
+```
+
+because `W` is mathematically a set.
+
+---
+
+## Compute the Fringe Once Per Crew
+
+After fixing a crew:
+
+```python
+fringe_shift_ids = fringe(W)
+```
+
+is computed once.
+
+This belongs outside the inner `S` loops because:
+
+[
+\partial(W)
+]
+
+depends only on (W).
+
+Different choices of (S) do not change the crew's fringe.
+
+Thus:
+
+```text
+choose W
+→ compute fringe once
+→ enumerate S from that result
+```
+
+avoids needless repeated work and mirrors the mathematical dependency.
+
+---
+
+## Enumerating Every Fringe Subset S
+
+If the fringe contains `b` physical shift IDs, a subset `S` may have any cardinality:
+
+[
+0,1,\ldots,b.
+]
+
+Therefore:
+
+```python
+for S_size in range(len(fringe_shift_ids) + 1):
+```
+
+must begin at zero.
+
+Then:
+
+```python
+itertools.combinations(fringe_shift_ids, S_size)
+```
+
+generates every subset of that size.
+
+For:
+
+```text
+fringe = [s0,s1,s2]
+```
+
+the enumeration is:
+
+```text
+size 0:
+∅
+
+size 1:
+{s0}
+{s1}
+{s2}
+
+size 2:
+{s0,s1}
+{s0,s2}
+{s1,s2}
+
+size 3:
+{s0,s1,s2}
+```
+
+giving:
+
+[
+1+3+3+1=8=2^3
+]
+
+subsets.
+
+Each generated tuple becomes:
+
+```python
+S = frozenset(S_combo)
+```
+
+---
+
+## Why Subset Size Zero Is Essential
+
+The oracle winner is:
+
+[
+W^*={a,b,c},
+\qquad
+S^*=\varnothing.
+]
+
+The winning crew has:
+
+[
+\partial(W^*)={s3}.
+]
+
+Its two possible fringe subsets are:
+
+```text
+∅
+{s3}
+```
+
+The nonempty one fails parity.
+
+Therefore the unique optimum depends on the search including the empty subset.
+
+If the `S_size` loop began at `1`, the actual optimum would never enter the search.
+
+The program could execute without error and still solve a different optimization problem.
+
+Thus:
+
+> Exhaustive enumeration is correct only if the boundary cases are included.
+
+---
+
+## Why Search Still Calls `is_admissible`
+
+Internally generated crews are already:
+
+```text
+nonempty
+subsets of WORKERS
+```
+
+and internally generated `S` sets are already subsets of the crew fringe.
+
+Therefore Conditions 1 and 2 are structurally guaranteed by search generation.
+
+The search still calls:
+
+```python
+is_admissible(W, S)
+```
+
+because admissibility is the single authoritative implementation of all four mathematical conditions.
+
+The search does not duplicate:
+
+```text
+parity
+lower-bound logic
+```
+
+inside itself.
+
+This preserves one source of truth for candidate eligibility.
+
+---
+
+## Filter Before Evaluation
+
+The search must perform:
+
+```python
+if not is_admissible(W, S):
+    continue
+```
+
+before:
+
+```python
+value = candidate_value(W, S)
+```
+
+This ordering is part of the evaluator contract.
+
+A known inadmissible example:
+
+```text
+W = {a,b}
+S = ∅
+```
+
+would cause:
+
+```text
+denominator = 0
+```
+
+if evaluated directly.
+
+Admissibility rejects it first because:
+
+```text
+skill(W) + |S| = 2 < 4
+```
+
+Therefore the safe architecture is:
+
+```text
+generate
+→ filter
+→ evaluate
+```
+
+not:
+
+```text
+generate
+→ evaluate
+→ filter
+```
+
+---
+
+## Search Result Record
+
+The specification requires named result fields:
+
+```text
+value
+W
+S
+```
+
+The stdlib `dataclass` provides a small record with named attributes.
+
+Use:
+
+```python
+@dataclass(frozen=True)
+class SearchResult:
+    value: Fraction
+    W: frozenset[str] | None
+    S: frozenset[str] | None
+```
+
+A result can then be accessed as:
+
+```python
+result.value
+result.W
+result.S
+```
+
+`frozen=True` makes the completed record immutable.
+
+---
+
+## Empty-Admissible-Family Contract
+
+The specification says that if no admissible pair exists, return:
+
+```text
+value = 0
+W = None
+S = None
+```
+
+Therefore:
+
+```python
+SearchResult(
+    value=Fraction(0, 1),
+    W=None,
+    S=None,
+)
+```
+
+represents the empty admissible family.
+
+`None` is deliberately used rather than:
+
+```python
+frozenset()
+```
+
+because an empty frozenset would look like an actual candidate set.
+
+`None` means:
+
+> No maximizing pair exists because no admissible candidate exists.
+
+---
+
+## Best Sentinel
+
+Internally the search begins:
+
+```python
+best = None
+```
+
+This means:
+
+> No admissible candidate has been encountered yet.
+
+It is better than initializing with a zero-valued `SearchResult`.
+
+An admissible candidate could, in a more general instance, have objective value exactly zero.
+
+If `best.value` began at zero and updates occurred only on strict improvement, the first legitimate zero-valued candidate might never be recorded.
+
+A `None` sentinel distinguishes:
+
+```text
+no candidate seen
+```
+
+from:
+
+```text
+candidate seen with value 0
+```
+
+---
+
+## First Admissible Candidate
+
+After an admissible candidate is evaluated:
+
+```python
+if best is None:
+    best = SearchResult(value=value, W=W, S=S)
+    continue
+```
+
+The first admissible pair is always recorded, regardless of its value.
+
+---
+
+## Tie Contract
+
+Later candidates replace the current best only if:
+
+```python
+value > best.value
+```
+
+not:
+
+```python
+value >= best.value
+```
+
+Using strict `>` means:
+
+```text
+equal value
+→ do not replace current result
+→ first encountered maximizer remains
+```
+
+Using `>=` would instead make the last encountered maximizer win.
+
+The specification requires first-on-tie behavior.
+
+---
+
+## Why Tie Behavior Is Deterministic
+
+The enumeration chain is stable:
+
+```text
+sorted(WORKERS)
+        ↓
+deterministic worker order
+        ↓
+itertools.combinations
+        ↓
+deterministic W order
+```
+
+and:
+
+```text
+SHIFTS stable list order
+        ↓
+fringe(W) preserves that order
+        ↓
+itertools.combinations
+        ↓
+deterministic S order
+```
+
+Therefore "first encountered" has a reproducible meaning.
+
+---
+
+## Search Validation Ownership
+
+`find_max_value()` does not automatically call `validate_instance()`.
+
+The contract is:
+
+```text
+instance lifecycle
+→ validate_instance()
+
+search query
+→ find_max_value()
+```
+
+The permanent pytest suite will include an instance-valid test, so a malformed fixed instance makes the suite fail.
+
+This keeps search focused on exhaustive optimization rather than repeating instance validation.
+
+---
+
+## Hand-Derived Search Prediction
+
+The committed oracle proves the unique maximizing pair is:
+
+[
+W^*={a,b,c},
+\qquad
+S^*=\varnothing,
+]
+
+with:
+
+[
+value=3.
+]
+
+Therefore:
+
+```python
+result = find_max_value()
+```
+
+must satisfy exactly:
+
+```python
+result.value == Fraction(3, 1)
+
+result.W == frozenset({"a", "b", "c"})
+
+result.S == frozenset()
+```
+
+The oracle also established that the largest nonwinning value is `2`, so the expected winner is not dependent on tie ordering.
+
+---
+
+> **RULE TO BANK:** Exhaustive search has three distinct responsibilities: enumerate every candidate without omission, filter eligibility through the authoritative predicate, and compare exact objective values. A correct formula cannot rescue a search space that silently omitted the true winner.
+
+````
+
+# COPY INTO `mock_search.py`
+
+```python
+# ==================================================================================================
+# MOCK EXIT 1 — EXHAUSTIVE SEARCH
+# ==================================================================================================
+#
+# PURPOSE:
+#
+# Exhaustively enumerate every candidate pair:
+#
+#     (W, S)
+#
+# where:
+#
+#     nonempty W subseteq WORKERS
+#
+# and:
+#
+#     S subseteq fringe(W)
+#
+# Then:
+#
+#     1. filter candidates through is_admissible(W, S),
+#     2. evaluate admissible candidates exactly,
+#     3. retain a maximizing pair,
+#     4. return the result with named fields.
+#
+#
+# SEARCH PIPELINE:
+#
+#     enumerate W
+#         ↓
+#     compute fringe(W)
+#         ↓
+#     enumerate S subseteq fringe(W)
+#         ↓
+#     is_admissible(W, S)
+#         ↓
+#     if False:
+#         skip
+#         ↓
+#     if True:
+#         candidate_value(W, S)
+#         ↓
+#     compare with current best
+#
+#
+# IMPORTANT:
+#
+# Candidate evaluation occurs ONLY AFTER admissibility.
+#
+# This preserves the evaluator's caller contract and prevents invalid
+# candidates with unsafe denominators from reaching Fraction arithmetic.
+#
+# ==================================================================================================
+
+
+import itertools
+from dataclasses import dataclass
+from fractions import Fraction
+
+from mock_admissibility import is_admissible
+from mock_evaluator import candidate_value
+from mock_instance import WORKERS
+from mock_primitives import fringe
+
+
+# ==================================================================================================
+# SEARCH RESULT RECORD
+# ==================================================================================================
+#
+# The search specification requires named fields:
+#
+#     result.value
+#     result.W
+#     result.S
+#
+# A dataclass supplies this small named record.
+#
+# frozen=True makes the completed result immutable.
+#
+#
+# ORDINARY RESULT:
+#
+#     value = exact Fraction
+#     W = frozenset of workers
+#     S = frozenset of shift IDs
+#
+#
+# EMPTY-ADMISSIBLE-FAMILY RESULT:
+#
+#     value = Fraction(0, 1)
+#     W = None
+#     S = None
+#
+# None is used because no actual maximizing pair exists in that case.
+#
+# Using empty frozensets would misleadingly look like the candidate:
+#
+#     (empty W, empty S)
+#
+# which is itself inadmissible.
+#
+# ==================================================================================================
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    value: Fraction
+    W: frozenset[str] | None
+    S: frozenset[str] | None
+
+
+# ==================================================================================================
+# find_max_value()
+# ==================================================================================================
+#
+# CALLER / LIFECYCLE CONTRACT:
+#
+# This function assumes the fixed data in mock_instance.py has already
+# been validated as part of the instance lifecycle.
+#
+# It does NOT call validate_instance() on every search invocation.
+#
+# The permanent pytest suite will directly test:
+#
+#     validate_instance()
+#
+# so edits that violate fixed-instance invariants fail verification before
+# a search result is trusted.
+#
+#
+# ==================================================================================================
+# DETERMINISTIC ENUMERATION
+# ==================================================================================================
+#
+# WORKERS is a frozenset, whose iteration order should not define the
+# search's tie behavior.
+#
+# Therefore:
+#
+#     workers = sorted(WORKERS)
+#
+# gives the deterministic sequence:
+#
+#     ["a", "b", "c", "d"]
+#
+#
+# itertools.combinations preserves input order.
+#
+# fringe(W) also returns shift IDs in stable SHIFTS order.
+#
+# Therefore both:
+#
+#     W enumeration
+#
+# and:
+#
+#     S enumeration
+#
+# are deterministic.
+#
+# This gives a reproducible meaning to:
+#
+#     first encountered maximizer wins ties.
+#
+#
+# ==================================================================================================
+# BEST-RESULT SENTINEL
+# ==================================================================================================
+#
+# Start:
+#
+#     best = None
+#
+# None means:
+#
+#     no admissible pair has been encountered yet.
+#
+# Do NOT initialize best as a zero-valued SearchResult.
+#
+# In a general instance, an admissible candidate could itself have value 0.
+#
+# A None sentinel distinguishes:
+#
+#     no admissible candidate seen
+#
+# from:
+#
+#     admissible candidate seen with value 0.
+#
+#
+# ==================================================================================================
+# COMMENTS-FIRST ALGORITHM
+# ==================================================================================================
+#
+# 1. Start:
+#
+#        best = None
+#
+#
+# 2. Create deterministic worker order:
+#
+#        workers = sorted(WORKERS)
+#
+#
+# 3. Enumerate every NONEMPTY crew size:
+#
+#        1, 2, ..., len(workers)
+#
+#
+# 4. For each crew size, generate every worker combination:
+#
+#        itertools.combinations(workers, W_size)
+#
+#
+# 5. Convert each combination to:
+#
+#        W = frozenset(W_combo)
+#
+#
+# 6. Compute:
+#
+#        fringe_shift_ids = fringe(W)
+#
+#    exactly ONCE for this W.
+#
+#
+# 7. Enumerate every possible S cardinality:
+#
+#        0, 1, ..., len(fringe_shift_ids)
+#
+#    Starting at zero is essential because the empty S is a valid subset
+#    and is the S-component of the hand-derived optimum.
+#
+#
+# 8. For each size, generate every subset:
+#
+#        itertools.combinations(fringe_shift_ids, S_size)
+#
+#
+# 9. Convert each generated tuple to:
+#
+#        S = frozenset(S_combo)
+#
+#
+# 10. Ask:
+#
+#         is_admissible(W, S)
+#
+#     If False:
+#
+#         continue
+#
+#
+# 11. Only for an admissible pair:
+#
+#         value = candidate_value(W, S)
+#
+#
+# 12. If:
+#
+#         best is None
+#
+#     this is the first admissible pair.
+#
+#     Record:
+#
+#         SearchResult(value=value, W=W, S=S)
+#
+#
+# 13. Otherwise compare:
+#
+#         value > best.value
+#
+#     If strictly greater:
+#
+#         replace best.
+#
+#     If equal:
+#
+#         leave best unchanged.
+#
+#     Therefore the FIRST encountered maximizer wins a tie.
+#
+#
+# 14. After complete enumeration:
+#
+#     if best is still None:
+#
+#         no admissible pair existed
+#
+#         return:
+#
+#             value = Fraction(0, 1)
+#             W = None
+#             S = None
+#
+#     otherwise:
+#
+#         return best
+#
+#
+# ==================================================================================================
+# HAND-DERIVED ORACLE
+# ==================================================================================================
+#
+# The independently committed oracle proves the unique maximizing pair is:
+#
+#     W* = {"a", "b", "c"}
+#     S* = empty
+#
+# with:
+#
+#     value = 3
+#
+# Therefore:
+#
+#     find_max_value()
+#
+# must ultimately return a SearchResult satisfying:
+#
+#     result.value == Fraction(3, 1)
+#
+#     result.W == frozenset({"a", "b", "c"})
+#
+#     result.S == frozenset()
+#
+# The hand audit also established that every nonwinning crew has best
+# value at most 2, so the oracle winner is unique rather than tie-selected.
+#
+# ==================================================================================================
+
+
+def find_max_value():
+    best = None
+
+    # Deterministic worker order for reproducible subset enumeration.
+    workers = sorted(WORKERS)
+
+    # Enumerate every nonempty worker subset W.
+    for W_size in range(1, len(workers) + 1):
+        for W_combo in itertools.combinations(workers, W_size):
+            W = frozenset(W_combo)
+
+            # The fringe depends only on W, so compute it once for this crew.
+            fringe_shift_ids = fringe(W)
+
+            # Enumerate every subset S of the fringe, including the empty set.
+            for S_size in range(len(fringe_shift_ids) + 1):
+                for S_combo in itertools.combinations(
+                    fringe_shift_ids, S_size
+                ):
+                    S = frozenset(S_combo)
+
+                    # Inadmissible candidates do not participate.
+                    if not is_admissible(W, S):
+                        continue
+
+                    # The evaluator contract is now satisfied.
+                    value = candidate_value(W, S)
+
+                    # The first admissible candidate becomes the initial best.
+                    if best is None:
+                        best = SearchResult(value=value, W=W, S=S)
+                        continue
+
+                    # Replace only on STRICT improvement.
+                    #
+                    # Equal values leave the first encountered maximizer
+                    # unchanged, implementing the required tie contract.
+                    if value > best.value:
+                        best = SearchResult(value=value, W=W, S=S)
+
+    # The admissible family is empty.
+    if best is None:
+        return SearchResult(
+            value=Fraction(0, 1),
+            W=None,
+            S=None,
+        )
+
+    return best
+````
+
+Save it and run:
+
+```bash
+python -c 'from mock_search import find_max_value; print(find_max_value())'
+```
+
+Then:
+
+```bash
+python -c 'from mock_search import find_max_value; r=find_max_value(); print(repr(r.value)); print(r.W); print(r.S)'
+```
+
+Bring me both outputs. We are expecting the committed oracle to come back to us from code for the first time:
+
+```text
+Fraction(3, 1)
+frozenset({"a","b","c"})
+frozenset()
+```
+==============================================================================================================================================================
+
+That is exactly the result we wanted. 🎯 For the first time, the implementation has independently reproduced the oracle that was committed before any checker code existed:
+
+```text
+value = Fraction(3, 1)
+W     = frozenset({"a", "b", "c"})
+S     = frozenset()
+```
+
+The only thing that may look odd is this:
+
+```text
+frozenset({'b', 'c', 'a'})
+```
+
+versus:
+
+```text
+frozenset({'c', 'a', 'b'})
+```
+
+That is **not nondeterministic search behavior**. It is only the display representation of a set-like object. A `frozenset` has no meaningful element order, so Python is free to print its members in different orders. Mathematically,
+
+[
+{a,b,c}={b,c,a}.
+]
+
+Our deterministic search order comes from `sorted(WORKERS)` and `itertools.combinations`; once the winning crew is stored as a `frozenset`, its printed element order is irrelevant.
+
+Now we harden the search before committing it.
+
+# Step 6B — Prove the Search Space Is Complete
+
+The search has two enumeration layers:
+
+[
+W
+]
+
+and then:
+
+[
+S\subseteq\partial(W).
+]
+
+We know there are exactly:
+
+[
+2^4-1=15
+]
+
+nonempty worker crews.
+
+But the number of `(W,S)` candidates is larger because each crew has its own power set of fringe shifts.
+
+From the oracle, the fringe sizes are:
+
+| Crew        | Fringe size | Number of possible (S) subsets |
+| ----------- | ----------: | -----------------------------: |
+| `{a}`       |           2 |                        (2^2=4) |
+| `{b}`       |           3 |                        (2^3=8) |
+| `{c}`       |           2 |                            (4) |
+| `{d}`       |           1 |                            (2) |
+| `{a,b}`     |           1 |                            (2) |
+| `{a,c}`     |           4 |                           (16) |
+| `{a,d}`     |           3 |                            (8) |
+| `{b,c}`     |           3 |                            (8) |
+| `{b,d}`     |           4 |                           (16) |
+| `{c,d}`     |           1 |                            (2) |
+| `{a,b,c}`   |           1 |                            (2) |
+| `{a,b,d}`   |           2 |                            (4) |
+| `{a,c,d}`   |           3 |                            (8) |
+| `{b,c,d}`   |           2 |                            (4) |
+| `{a,b,c,d}` |           0 |                            (1) |
+
+Add them:
+
+[
+4+8+4+2+2+16+8+8+16+2+2+4+8+4+1=89.
+]
+
+So the search should structurally generate **89 candidate pairs before admissibility filtering**.
+
+That is worth checking because it tests the enumeration mechanics independently of the final maximum.
+
+Run:
+
+```bash
+python -c 'import itertools; from mock_instance import WORKERS; from mock_primitives import fringe; workers=sorted(WORKERS); count=0; [None for r in range(1,len(workers)+1) for combo in itertools.combinations(workers,r) for _ in itertools.chain.from_iterable(itertools.combinations(fringe(frozenset(combo)),s) for s in range(len(fringe(frozenset(combo)))+1)) if not (count:=count+1)]; print(count)'
+```
+
+Actually, **do not use that**. It is compact to the point of being unreadable and teaches us nothing. This is exactly the kind of clever one-liner we do not need.
+
+Use this clear temporary terminal command instead:
+
+```bash
+python - <<'PY'
+import itertools
+
+from mock_instance import WORKERS
+from mock_primitives import fringe
+
+count = 0
+workers = sorted(WORKERS)
+
+for W_size in range(1, len(workers) + 1):
+    for W_combo in itertools.combinations(workers, W_size):
+        W = frozenset(W_combo)
+        fringe_ids = fringe(W)
+
+        for S_size in range(len(fringe_ids) + 1):
+            for _S_combo in itertools.combinations(fringe_ids, S_size):
+                count += 1
+
+print(count)
+PY
+```
+
+### Prediction
+
+```text
+89
+```
+
+Notice this code deliberately mirrors the enumeration portion of `find_max_value()` but performs no admissibility or evaluation.
+
+It answers only:
+
+> How many structurally generated `(W,S)` pairs exist?
+
+---
+
+# Step 6C — Count the Admissible Candidates
+
+We can push the audit one step further.
+
+From the hand derivation, the number of admissible pairs per crew is determined by the allowed subset sizes.
+
+For example:
+
+### `{a,c}`
+
+Its fringe has 4 shifts.
+
+Allowed sizes are:
+
+[
+1,3.
+]
+
+So the number of admissible choices is:
+
+[
+\binom41+\binom43
+=================
+
+# 4+4
+
+8.
+
+]
+
+### `{b,c}`
+
+Its fringe has 3 shifts.
+
+Allowed sizes:
+
+[
+1,3.
+]
+
+So:
+
+[
+\binom31+\binom33
+=================
+
+# 3+1
+
+4.
+
+]
+
+Doing that across all 15 crews gives **37 admissible pairs**.
+
+Let's ask the implementation to count them without evaluating anything:
+
+```bash
+python - <<'PY'
+import itertools
+
+from mock_admissibility import is_admissible
+from mock_instance import WORKERS
+from mock_primitives import fringe
+
+count = 0
+workers = sorted(WORKERS)
+
+for W_size in range(1, len(workers) + 1):
+    for W_combo in itertools.combinations(workers, W_size):
+        W = frozenset(W_combo)
+        fringe_ids = fringe(W)
+
+        for S_size in range(len(fringe_ids) + 1):
+            for S_combo in itertools.combinations(fringe_ids, S_size):
+                S = frozenset(S_combo)
+
+                if is_admissible(W, S):
+                    count += 1
+
+print(count)
+PY
+```
+
+### Prediction
+
+```text
+37
+```
+
+This gives us a nice three-stage audit:
+
+```text
+15 nonempty crews
+        ↓
+89 structurally generated (W,S) pairs
+        ↓
+37 admissible pairs
+        ↓
+1 unique maximizer
+```
+
+That is a very strong picture of what exhaustive search is actually doing.
+
+---
+
+# Step 6D — Exact Oracle Equality
+
+Now test the three result fields directly rather than merely looking at printed output.
+
+Run:
+
+```bash
+python - <<'PY'
+from fractions import Fraction
+
+from mock_search import find_max_value
+
+result = find_max_value()
+
+print(result.value == Fraction(3, 1))
+print(result.W == frozenset({"a", "b", "c"}))
+print(result.S == frozenset())
+PY
+```
+
+### Prediction
+
+```text
+True
+True
+True
+```
+
+This is much closer to what the permanent oracle test will eventually assert.
+
+---
+
+# Why the Different Frozenset Print Orders Don't Matter
+
+You saw:
+
+```text
+frozenset({'b', 'c', 'a'})
+```
+
+and then:
+
+```text
+frozenset({'c', 'a', 'b'})
+```
+
+The important distinction is:
+
+```text
+search enumeration order
+≠
+set display order
+```
+
+We made search enumeration deterministic by doing:
+
+```python
+workers = sorted(WORKERS)
+```
+
+So the search visits crews in deterministic combination order.
+
+But after:
+
+```python
+W = frozenset(W_combo)
+```
+
+we intentionally discard order because (W) is mathematically a set.
+
+When Python prints a `frozenset`, it does not promise to preserve the order in which elements entered it.
+
+So this:
+
+```python
+frozenset({"a", "b", "c"})
+```
+
+and this:
+
+```python
+frozenset({"c", "a", "b"})
+```
+
+compare as:
+
+```python
+True
+```
+
+because equality is based on membership, not display order.
+
+This is exactly what we want.
+
+---
+
+# Step 6E — Module Silence
+
+Run:
+
+```bash
+python mock_search.py
+```
+
+Prediction:
+
+**no output**.
+
+`find_max_value()` is defined but not automatically invoked.
+
+---
+
+# Step 6F — Ruff
+
+Run:
+
+```bash
+ruff check mock_search.py
+```
+
+Given the pattern we have seen this afternoon, I would not be surprised if Ruff reports:
+
+```text
+I001 [*] Import block is un-sorted or un-formatted
+```
+
+If it does, use:
+
+```bash
+ruff check mock_search.py --fix
+```
+
+then:
+
+```bash
+ruff check mock_search.py
+```
+
+We want:
+
+```text
+All checks passed!
+```
+
+Again, only this file.
+
+---
+
+# Step 6G — Re-run the Oracle After Any Ruff Rewrite
+
+If Ruff changes the file, rerun:
+
+```bash
+python - <<'PY'
+from fractions import Fraction
+
+from mock_search import find_max_value
+
+result = find_max_value()
+
+assert result.value == Fraction(3, 1)
+assert result.W == frozenset({"a", "b", "c"})
+assert result.S == frozenset()
+
+print("oracle reproduced exactly")
+PY
+```
+
+### Prediction
+
+```text
+oracle reproduced exactly
+```
+
+This is a useful transition from visual checking to actual assertions.
+
+---
+
+# Step 6H — Commit the Search Layer
+
+After you have:
+
+```text
+generated candidates → 89
+admissible candidates → 37
+three oracle fields   → True, True, True
+module                → silent
+Ruff                  → clean
+final assertions      → oracle reproduced exactly
+```
+
+run:
+
+```bash
+git status
+```
+
+You should likely see:
+
+```text
+modified:   mock_notes_1.md
+untracked:  mock_search.py
+```
+
+Stage only the implementation:
+
+```bash
+git add mock_search.py
+```
+
+Check:
+
+```bash
+git status
+```
+
+Then commit:
+
+```bash
+git commit -m "mock1: add exhaustive crew-assignment search"
+```
+
+Then notes:
+
+```bash
+git add mock_notes_1.md
+git commit -m "mock1: document exhaustive search and enumeration audit"
+```
+
+Finally:
+
+```bash
+git status
+```
+
+Expected:
+
+```text
+nothing to commit, working tree clean
+```
+
+Once that is done, **all implementation modules are complete**.
+
+The only remaining deliverable is:
+
+```text
+test_mock.py
+```
+
+That permanent suite will turn all the interactive proofs we have been doing into automated regression tests.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Step 6B — Search Reproduces the Oracle
+
+The first complete execution of:
+
+```python
+find_max_value()
+````
+
+returned:
+
+```text
+SearchResult(
+    value=Fraction(3, 1),
+    W=frozenset({"a","b","c"}),
+    S=frozenset()
+)
+```
+
+The printed order of the worker names varied between runs:
+
+```text
+frozenset({'b', 'c', 'a'})
+```
+
+and:
+
+```text
+frozenset({'c', 'a', 'b'})
+```
+
+This does not mean the search enumeration is nondeterministic.
+
+A `frozenset` has no meaningful element order, so its display representation may list members in different orders.
+
+Set equality depends only on membership:
+
+```python
+frozenset({"a", "b", "c"}) == frozenset({"c", "a", "b"})
+```
+
+is:
+
+```text
+True
+```
+
+The deterministic part of the search occurs before this representation:
+
+```text
+sorted(WORKERS)
+        ↓
+stable worker sequence
+        ↓
+itertools.combinations
+        ↓
+deterministic crew enumeration
+```
+
+For each crew:
+
+```text
+SHIFTS stable order
+        ↓
+fringe(W) stable list
+        ↓
+itertools.combinations
+        ↓
+deterministic S enumeration
+```
+
+The result is stored as a `frozenset` because mathematical crew order is irrelevant.
+
+Thus:
+
+> Deterministic search order and unordered mathematical result representation are compatible concepts.
+
+---
+
+## Exhaustive Search-Space Count
+
+There are:
+
+[
+2^4-1=15
+]
+
+nonempty crews.
+
+For each crew (W), every subset of its fringe is structurally generated.
+
+If:
+
+[
+|\partial(W)|=b,
+]
+
+then that crew contributes:
+
+[
+2^b
+]
+
+candidate `S` subsets.
+
+Using the hand-derived fringe sizes:
+
+| Crew        | Fringe size | Number of S subsets |
+| ----------- | ----------: | ------------------: |
+| `{a}`       |           2 |                   4 |
+| `{b}`       |           3 |                   8 |
+| `{c}`       |           2 |                   4 |
+| `{d}`       |           1 |                   2 |
+| `{a,b}`     |           1 |                   2 |
+| `{a,c}`     |           4 |                  16 |
+| `{a,d}`     |           3 |                   8 |
+| `{b,c}`     |           3 |                   8 |
+| `{b,d}`     |           4 |                  16 |
+| `{c,d}`     |           1 |                   2 |
+| `{a,b,c}`   |           1 |                   2 |
+| `{a,b,d}`   |           2 |                   4 |
+| `{a,c,d}`   |           3 |                   8 |
+| `{b,c,d}`   |           2 |                   4 |
+| `{a,b,c,d}` |           0 |                   1 |
+
+Therefore the complete structural candidate count is:
+
+[
+4+8+4+2+2+16+8+8+16+2+2+4+8+4+1
+===============================
+
+89.
+
+]
+
+The implementation can independently count these candidates without evaluating them.
+
+Expected:
+
+```text
+89
+```
+
+This checks that the nested subset enumeration includes all crews, all fringe subsets, and the empty subset.
+
+---
+
+## Admissible Candidate Count
+
+The 89 structurally generated candidates are then filtered by:
+
+```python
+is_admissible(W, S)
+```
+
+Using the hand-derived allowed `S` cardinalities, the fixed instance contains:
+
+```text
+37 admissible pairs
+```
+
+Thus the search funnel is:
+
+```text
+15 nonempty crews
+        ↓
+89 structurally generated (W,S) candidates
+        ↓
+37 admissible candidates
+        ↓
+exact evaluation
+        ↓
+1 unique maximizing pair
+```
+
+The unique maximizer is:
+
+```text
+W = {a,b,c}
+S = ∅
+value = 3
+```
+
+This gives a more complete understanding of exhaustive search than merely observing its final answer.
+
+---
+
+## Direct Oracle Equality
+
+The search result should be checked by mathematical equality rather than by printed formatting.
+
+The three exact comparisons are:
+
+```python
+result.value == Fraction(3, 1)
+result.W == frozenset({"a", "b", "c"})
+result.S == frozenset()
+```
+
+Expected:
+
+```text
+True
+True
+True
+```
+
+A future pytest known-answer test will make precisely these assertions.
+
+---
+
+## Why Empty S Enumeration Was Critical
+
+The winning crew has:
+
+```text
+W = {a,b,c}
+fringe(W) = ["s3"]
+```
+
+Its two possible fringe subsets are:
+
+```text
+∅
+{s3}
+```
+
+The nonempty choice fails parity because:
+
+```text
+skill(W) + |S|
+= 4 + 1
+= 5
+```
+
+is odd.
+
+Therefore the unique optimum requires:
+
+```text
+S = ∅
+```
+
+If the `S_size` enumeration began at 1 instead of 0, the actual optimum would not enter the search at all.
+
+This illustrates a fundamental exhaustive-search risk:
+
+> A program may perform every calculation correctly while solving the wrong problem because one boundary case was omitted from enumeration.
+
+---
+
+## Search Layer Closure
+
+Before committing the search:
+
+1. Count all structurally generated candidates.
+
+Expected:
+
+```text
+89
+```
+
+2. Count all admissible candidates.
+
+Expected:
+
+```text
+37
+```
+
+3. Compare all three oracle fields exactly.
+
+Expected:
+
+```text
+True
+True
+True
+```
+
+4. Run:
+
+```bash
+python mock_search.py
+```
+
+Expected:
+
+```text
+no output
+```
+
+5. Run:
+
+```bash
+ruff check mock_search.py
+```
+
+If an auto-fixable import-formatting finding appears:
+
+```bash
+ruff check mock_search.py --fix
+ruff check mock_search.py
+```
+
+6. After any rewrite, assert the oracle again:
+
+```python
+assert result.value == Fraction(3, 1)
+assert result.W == frozenset({"a", "b", "c"})
+assert result.S == frozenset()
+```
+
+Expected final confirmation:
+
+```text
+oracle reproduced exactly
+```
+
+> **RULE TO BANK:** Exhaustive search correctness has two components: every candidate must be generated, and every generated candidate must be processed correctly. Checking only the final maximum can miss an enumeration defect that happens not to affect one toy answer.
+
+````
+
+# COPY INTO `mock_search.py`
+
+**No code change is needed.**
+
+Keep the complete current `mock_search.py` exactly as written.
+
+The next actions are verification only:
+
+```bash
+# Count the full structurally generated search space.
+python - <<'PY'
+import itertools
+
+from mock_instance import WORKERS
+from mock_primitives import fringe
+
+count = 0
+workers = sorted(WORKERS)
+
+for W_size in range(1, len(workers) + 1):
+    for W_combo in itertools.combinations(workers, W_size):
+        W = frozenset(W_combo)
+        fringe_ids = fringe(W)
+
+        for S_size in range(len(fringe_ids) + 1):
+            for _S_combo in itertools.combinations(fringe_ids, S_size):
+                count += 1
+
+print(count)
+PY
+````
+
+Expected:
+
+```text
+89
+```
+
+Then the admissible count:
+
+```bash
+python - <<'PY'
+import itertools
+
+from mock_admissibility import is_admissible
+from mock_instance import WORKERS
+from mock_primitives import fringe
+
+count = 0
+workers = sorted(WORKERS)
+
+for W_size in range(1, len(workers) + 1):
+    for W_combo in itertools.combinations(workers, W_size):
+        W = frozenset(W_combo)
+        fringe_ids = fringe(W)
+
+        for S_size in range(len(fringe_ids) + 1):
+            for S_combo in itertools.combinations(fringe_ids, S_size):
+                S = frozenset(S_combo)
+
+                if is_admissible(W, S):
+                    count += 1
+
+print(count)
+PY
+```
+
+Expected:
+
+```text
+37
+```
+
+Then exact oracle equality, module silence, Ruff, and the two commits above.
+
+==============================================================================================================================================================
+
 
 
 
