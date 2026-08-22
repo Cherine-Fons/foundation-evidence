@@ -7903,3 +7903,3546 @@ That ordering is fine because **both precede implementation**, while the oracle 
 Once those two commits are complete and `git status` is clean, tell me **“oracle committed.”** Then we start `mock_instance.py` from absolute zero: first representation choices, then data, then each validator invariant, with predictions and break tests just like we did for the capstone.
 ================================================================================================================================================================
 
+We are now allowed to write the **first Python implementation file** because the oracle exists first in Git. From this point onward, we are translating already-established mathematics into software.
+
+# Step 2 — Build `mock_instance.py`
+
+The instance module has two jobs:
+
+1. **Store the fixed problem data.**
+2. **Reject malformed instance data before anything downstream trusts it.**
+
+It does **not** compute admissibility, density, or search results. Those belong to later layers.
+
+---
+
+## 1. Preflight
+
+First confirm you are starting this implementation step from a clean repository:
+
+```bash
+git status
+```
+
+We want:
+
+```text
+nothing to commit, working tree clean
+```
+
+Now create the first Python file:
+
+```bash
+code mock_instance.py
+```
+
+Confirm:
+
+```bash
+ls mock_instance.py
+```
+
+Expected:
+
+```text
+mock_instance.py
+```
+
+---
+
+# 2. Translate the Mathematical Objects Into Python
+
+We have three pieces of instance data:
+
+```text
+workers
+shifts
+skill values
+```
+
+We need a representation for each.
+
+---
+
+## `WORKERS` — use a `frozenset`
+
+Mathematically:
+
+[
+WORKERS={a,b,c,d}.
+]
+
+In Python:
+
+```python
+WORKERS = frozenset({"a", "b", "c", "d"})
+```
+
+Why `frozenset`?
+
+Because the workers form a mathematical set:
+
+* order is not mathematically significant;
+* duplicates make no sense;
+* membership tests such as `"a" in WORKERS` are natural;
+* the fixed instance should not accidentally mutate the worker set.
+
+This is the same representation idea you used for the capstone vertex set.
+
+---
+
+# 3. `SHIFTS` — use a list of triples
+
+Each physical shift is:
+
+```text
+(shift_id, worker1, worker2)
+```
+
+so:
+
+```python
+SHIFTS = [
+    ("s0", "a", "b"),
+    ("s1", "a", "b"),
+    ("s2", "b", "c"),
+    ("s3", "c", "d"),
+]
+```
+
+Why a list?
+
+Because the **physical copies must remain separate**.
+
+These are distinct:
+
+```python
+("s0", "a", "b")
+("s1", "a", "b")
+```
+
+even though the endpoints match.
+
+A later loop should encounter both copies.
+
+The list also preserves a stable order:
+
+```text
+s0
+s1
+s2
+s3
+```
+
+That will eventually help make exhaustive enumeration deterministic.
+
+---
+
+# 4. `SKILL_VALUES` — use a dictionary
+
+The mathematical function is:
+
+```text
+a → 1
+b → 1
+c → 2
+d → 2
+```
+
+Python dictionaries are designed for exactly this kind of mapping:
+
+```python
+SKILL_VALUES = {
+    "a": 1,
+    "b": 1,
+    "c": 2,
+    "d": 2,
+}
+```
+
+Then later:
+
+```python
+SKILL_VALUES["c"]
+```
+
+returns:
+
+```text
+2
+```
+
+This is directly analogous to your capstone's `F_VALUES`.
+
+---
+
+# 5. What Does `validate_instance()` Actually Protect?
+
+The validator protects the **fixed input data**, not candidate queries.
+
+This distinction matters:
+
+```text
+validate_instance()
+    asks whether the graph itself is structurally trustworthy
+
+is_admissible(W, S)
+    will later ask whether one candidate pair is allowed
+```
+
+Those are different contracts.
+
+The mock specification gives five minimum instance invariants.
+
+We will implement exactly those five.
+
+---
+
+# Check 1 — `WORKERS` Must Be Nonempty
+
+The problem requires actual workers.
+
+So:
+
+```python
+if not WORKERS:
+    raise ValueError("WORKERS must be nonempty")
+```
+
+If the worker set were empty, the entire fixed problem would be malformed.
+
+This is an **instance error**, so we raise.
+
+It is not an ordinary negative search result.
+
+---
+
+# Check 2 — No Shift May Pair a Worker With Themselves
+
+A shift such as:
+
+```python
+("s3", "c", "c")
+```
+
+would be a loop.
+
+But the specification explicitly says:
+
+> No shift pairs a worker with themselves.
+
+So every shift must satisfy:
+
+[
+worker1\neq worker2.
+]
+
+In Python:
+
+```python
+if worker1 == worker2:
+```
+
+then raise a named error.
+
+I propose:
+
+```text
+shift s3 self-pairs worker 'c'
+```
+
+The exact exception line would be:
+
+```text
+ValueError: shift s3 self-pairs worker 'c'
+```
+
+The `!r` representation gives us the quotes around `"c"`.
+
+---
+
+# Check 3 — Every Shift Endpoint Must Be a Known Worker
+
+Suppose somebody accidentally writes:
+
+```python
+("s3", "c", "x")
+```
+
+where `"x"` is not in:
+
+```python
+WORKERS
+```
+
+We do **not** want that malformed graph to survive until some later function fails mysteriously.
+
+So for every shift:
+
+```python
+worker1 in WORKERS
+worker2 in WORKERS
+```
+
+must both hold.
+
+If not, we raise and name:
+
+* the shift ID;
+* the offending endpoint.
+
+For example:
+
+```text
+ValueError: shift s3 has unknown worker 'x'
+```
+
+This follows the hardening lesson from the capstone:
+
+> Catch the semantic contract violation rather than waiting for a mechanical `KeyError`.
+
+---
+
+# Check 4 — Every Shift ID Must Be Unique
+
+This is one of the most important representation invariants.
+
+Valid parallel shifts:
+
+```python
+("s0", "a", "b")
+("s1", "a", "b")
+```
+
+Same endpoints.
+
+Different IDs.
+
+Invalid:
+
+```python
+("s0", "a", "b")
+("s0", "a", "b")
+```
+
+Why dangerous?
+
+Later, fringe sets and candidate (S) values will be represented using **shift IDs**.
+
+If two physical shifts share `"s0"`, then:
+
+```python
+frozenset({"s0", "s0"})
+```
+
+collapses to:
+
+```python
+frozenset({"s0"})
+```
+
+and:
+
+[
+|S|
+]
+
+would silently undercount the physical shift copies.
+
+That could produce mathematically wrong values without causing a crash.
+
+So we use the same `seen`-set pattern you learned:
+
+```python
+seen_shift_ids = set()
+
+for shift_id, ... in SHIFTS:
+    if shift_id in seen_shift_ids:
+        raise ValueError(...)
+    seen_shift_ids.add(shift_id)
+```
+
+The logic is:
+
+```text
+first s0
+→ unseen
+→ record s0
+
+s1
+→ unseen
+→ record s1
+
+...
+
+another s0
+→ already seen
+→ reject
+```
+
+---
+
+# Check 5 — Every Worker Must Have a Positive Integer Skill
+
+For each worker:
+
+```python
+worker in WORKERS
+```
+
+we first require a mapping entry:
+
+```python
+worker in SKILL_VALUES
+```
+
+If not:
+
+```text
+ValueError: missing skill value for worker 'c'
+```
+
+Then we require its value to be a **positive integer**.
+
+So:
+
+```text
+1  ✓
+2  ✓
+5  ✓
+
+0     ✗
+-2    ✗
+1.5   ✗
+"2"   ✗
+True  ✗
+```
+
+You might ask why `True` is listed as invalid when:
+
+```python
+isinstance(True, int)
+```
+
+is actually `True` in Python.
+
+Python's `bool` type is a subclass of `int`.
+
+So we deliberately use:
+
+```python
+type(skill_value) is not int
+```
+
+rather than:
+
+```python
+not isinstance(skill_value, int)
+```
+
+That expresses the contract:
+
+> actual integer, not Boolean masquerading as one.
+
+---
+
+# 6. Notice What Is NOT In This Validator
+
+There is **no** condition like:
+
+[
+skill(w)\le degree(w).
+]
+
+That existed in your capstone's active regime.
+
+It does **not** exist in this mock specification.
+
+So we must not pattern-replay:
+
+```python
+if SKILL_VALUES[worker] > degree[worker]:
+    ...
+```
+
+That code would be mathematically unjustified here.
+
+This is one of the main things the mock is testing:
+
+> Reuse architecture; do not import assumptions.
+
+---
+
+# 7. Why This Module Should Be Silent
+
+When another module eventually writes:
+
+```python
+from mock_instance import WORKERS, SHIFTS, SKILL_VALUES
+```
+
+we do not want importing the data module to unexpectedly print messages or execute a search.
+
+So there will be **no top-level print** and no top-level call to:
+
+```python
+validate_instance()
+```
+
+The file consists only of:
+
+```text
+data
+function definitions
+```
+
+That makes it a clean importable module.
+
+---
+
+# 8. Prediction Before Running Anything
+
+With the correct locked instance, every validation condition passes:
+
+```text
+Check 1
+WORKERS nonempty
+→ pass
+
+Check 2
+no self-pairing
+→ pass
+
+Check 3
+all shift endpoints known
+→ pass
+
+Check 4
+shift IDs s0, s1, s2, s3 unique
+→ pass
+
+Check 5
+all four workers have positive integer skills
+→ pass
+```
+
+Therefore:
+
+```python
+validate_instance()
+```
+
+should return normally without printing anything.
+
+Rather than temporarily altering the module to call itself, we can test it from the terminal:
+
+```bash
+python -c "from mock_instance import validate_instance; validate_instance(); print('mock instance valid')"
+```
+
+Prediction:
+
+```text
+mock instance valid
+```
+
+The function itself prints nothing.
+
+The explicit terminal `print(...)` runs only if validation reaches the end without raising.
+
+---
+
+# 9. Do This Now
+
+Paste the complete `mock_instance.py` below into VS Code and save it.
+
+Then run:
+
+```bash
+python -c "from mock_instance import validate_instance; validate_instance(); print('mock instance valid')"
+```
+
+Expected:
+
+```text
+mock instance valid
+```
+
+Then run:
+
+```bash
+python mock_instance.py
+```
+
+Expected:
+
+**nothing at all.**
+
+That proves the module itself remains silent when loaded as a script because it only defines data and functions.
+
+Do **not commit yet**. We will prove at least the two highest-risk guards reject malformed data before committing the instance module.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Step 2 — Instance Representation and Validation
+
+The first implementation layer is `mock_instance.py`.
+
+Its responsibilities are deliberately narrow:
+
+1. store the fixed problem data;
+2. validate the graph-level invariants.
+
+It does not:
+
+- evaluate candidate admissibility,
+- compute density,
+- enumerate subsets,
+- search for a maximizer.
+
+Those responsibilities belong to later modules.
+
+---
+
+### Representing WORKERS
+
+The mathematical worker set is:
+
+```text
+{a,b,c,d}
+````
+
+The Python representation is:
+
+```python
+WORKERS = frozenset({"a", "b", "c", "d"})
+```
+
+A `frozenset` is appropriate because:
+
+* workers form a mathematical set;
+* order is not mathematically meaningful;
+* duplicates are impossible;
+* membership testing is natural;
+* the fixed worker set should not mutate accidentally.
+
+---
+
+### Representing SHIFTS
+
+Each physical shift copy has the structure:
+
+```text
+(shift_id, worker1, worker2)
+```
+
+The fixed shifts are:
+
+```python
+SHIFTS = [
+    ("s0", "a", "b"),
+    ("s1", "a", "b"),
+    ("s2", "b", "c"),
+    ("s3", "c", "d"),
+]
+```
+
+A list is useful because:
+
+* every physical copy remains present;
+* parallel copies remain distinct;
+* stable input order is preserved;
+* later deterministic enumeration can inherit that order.
+
+The two shifts:
+
+```text
+s0 = (a,b)
+s1 = (a,b)
+```
+
+have identical endpoints but different identities.
+
+Parallelism means:
+
+```text
+same endpoints
+different IDs
+```
+
+---
+
+### Representing Skill Values
+
+Worker skill is a mapping:
+
+```text
+worker -> positive integer skill
+```
+
+so a dictionary is appropriate:
+
+```python
+SKILL_VALUES = {
+    "a": 1,
+    "b": 1,
+    "c": 2,
+    "d": 2,
+}
+```
+
+---
+
+## Instance Validation Contract
+
+`validate_instance()` protects the fixed graph data.
+
+An invalid instance is not an ordinary search outcome. It means downstream mathematics cannot be trusted.
+
+Therefore:
+
+```text
+bad instance
+→ raise ValueError
+```
+
+The validator is fail-fast: the first discovered violation stops execution.
+
+Messages should identify the offending worker or shift.
+
+---
+
+### Check 1 — Nonempty Worker Set
+
+Require:
+
+```text
+WORKERS != ∅
+```
+
+If the worker set is empty:
+
+```text
+ValueError: WORKERS must be nonempty
+```
+
+---
+
+### Check 2 — No Self-Pairing
+
+Every shift:
+
+```text
+(shift_id, worker1, worker2)
+```
+
+must satisfy:
+
+```text
+worker1 != worker2
+```
+
+A shift such as:
+
+```text
+("s3", "c", "c")
+```
+
+violates the problem specification.
+
+The validator should name the shift and worker.
+
+---
+
+### Check 3 — Every Shift Endpoint Is Known
+
+For every shift:
+
+```text
+worker1 in WORKERS
+worker2 in WORKERS
+```
+
+must hold.
+
+For example:
+
+```text
+("s3", "c", "x")
+```
+
+must be rejected because `"x"` is not a known worker.
+
+This check converts a potentially confusing downstream mechanical failure into a named semantic contract violation.
+
+The lesson carried from F7 hardening is:
+
+> Validate the prerequisites of later computations before those computations can fail for the wrong reason.
+
+---
+
+### Check 4 — Unique Shift IDs
+
+Every physical shift copy must have a unique ID.
+
+Valid:
+
+```text
+("s0", "a", "b")
+("s1", "a", "b")
+```
+
+Invalid:
+
+```text
+("s0", "a", "b")
+("s0", "a", "b")
+```
+
+The check uses a `seen_shift_ids` set:
+
+```text
+start seen = ∅
+
+first ID:
+    if unseen → record it
+
+later ID:
+    if already seen → reject
+```
+
+This is not cosmetic metadata validation.
+
+Later:
+
+```text
+fringe(W)
+```
+
+will return shift IDs and candidate `S` will be represented as a `frozenset` of IDs.
+
+If two physical shifts shared one ID, converting selected IDs to a `frozenset` could collapse the copies:
+
+```text
+{"s0", "s0"} → {"s0"}
+```
+
+Then:
+
+```text
+|S|
+```
+
+would silently undercount physical shifts.
+
+That would corrupt the mathematical search space without necessarily causing an exception.
+
+---
+
+### Check 5 — Positive Integer Skills
+
+Every worker in `WORKERS` must have a skill value.
+
+Each skill must satisfy:
+
+```text
+type(skill) is int
+skill > 0
+```
+
+Using:
+
+```python
+type(skill_value) is int
+```
+
+rather than merely:
+
+```python
+isinstance(skill_value, int)
+```
+
+also rejects Boolean values, since Python treats `bool` as a subclass of `int`.
+
+---
+
+## What Is Deliberately NOT Validated
+
+The F7 capstone contained an active-regime assumption:
+
+```text
+f(v) <= d(v)
+```
+
+No corresponding assumption exists in the Crew-Assignment Density specification.
+
+Therefore `mock_instance.py` must not invent:
+
+```text
+skill(worker) <= degree(worker)
+```
+
+or any related check.
+
+This mock tests the distinction:
+
+> Reuse software patterns only when the new mathematical specification supports them.
+
+Architecture may transfer.
+
+Assumptions do not transfer automatically.
+
+---
+
+## Module Silence
+
+`mock_instance.py` contains only:
+
+* fixed data,
+* function definitions.
+
+It contains no top-level print and no top-level validation call.
+
+This keeps it silent when imported by future modules.
+
+The valid instance can be exercised externally with:
+
+```bash
+python -c "from mock_instance import validate_instance; validate_instance(); print('mock instance valid')"
+```
+
+Expected:
+
+```text
+mock instance valid
+```
+
+Running:
+
+```bash
+python mock_instance.py
+```
+
+should produce no output.
+
+---
+
+> **RULE TO BANK:** The instance layer establishes whether the fixed input data is trustworthy. Validate representation invariants there, especially invariants whose violation could silently change the mathematical object represented by the code.
+
+````
+
+# COPY INTO `mock_instance.py`
+
+```python
+# ==================================================================================================
+# MOCK EXIT 1 — CREW-ASSIGNMENT INSTANCE
+# ==================================================================================================
+#
+# PURPOSE:
+#
+# Store the fixed Crew-Assignment Density instance and validate the
+# graph-level assumptions required by every later checker component.
+#
+#
+# THIS MODULE CONTAINS:
+#
+# 1. WORKERS
+# 2. SHIFTS
+# 3. SKILL_VALUES
+# 4. validate_instance()
+#
+#
+# RESPONSIBILITY BOUNDARY:
+#
+# This module validates the INSTANCE.
+#
+# It does NOT:
+#
+#     - judge candidate admissibility,
+#     - evaluate the objective,
+#     - enumerate candidate pairs,
+#     - search for a maximizer.
+#
+# Those belong to later modules.
+#
+#
+# MODULE BEHAVIOR:
+#
+# This file is intentionally silent.
+#
+# Importing it should define data and functions without printing or
+# automatically running validation.
+#
+# ==================================================================================================
+
+
+# ==================================================================================================
+# WORKERS
+# ==================================================================================================
+#
+# The fixed worker set is:
+#
+#     {a, b, c, d}
+#
+# A frozenset is used because:
+#
+#     - workers form a mathematical set,
+#     - order is not mathematically significant,
+#     - duplicates should not exist,
+#     - membership checks are natural,
+#     - the fixed instance should not accidentally mutate this set.
+#
+# ==================================================================================================
+
+
+WORKERS = frozenset({"a", "b", "c", "d"})
+
+
+# ==================================================================================================
+# SHIFTS
+# ==================================================================================================
+#
+# Every physical shift copy has the form:
+#
+#     (shift_id, worker1, worker2)
+#
+# The fixed instance contains:
+#
+#     s0 = (a, b)
+#     s1 = (a, b)    parallel copy of s0
+#     s2 = (b, c)
+#     s3 = (c, d)
+#
+# A list preserves:
+#
+#     - every physical shift copy,
+#     - the distinction between parallel copies,
+#     - stable input order.
+#
+# IMPORTANT:
+#
+#     s0 and s1 have the same endpoints,
+#
+# but:
+#
+#     s0 != s1
+#
+# because they are distinct physical shifts.
+#
+# Shift IDs therefore function as the identities of physical copies.
+#
+# ==================================================================================================
+
+
+SHIFTS = [
+    ("s0", "a", "b"),
+    ("s1", "a", "b"),
+    ("s2", "b", "c"),
+    ("s3", "c", "d"),
+]
+
+
+# ==================================================================================================
+# SKILL VALUES
+# ==================================================================================================
+#
+# Skill is a positive-integer function on workers:
+#
+#     a -> 1
+#     b -> 1
+#     c -> 2
+#     d -> 2
+#
+# A dictionary represents:
+#
+#     worker -> skill value
+#
+# ==================================================================================================
+
+
+SKILL_VALUES = {
+    "a": 1,
+    "b": 1,
+    "c": 2,
+    "d": 2,
+}
+
+
+# ==================================================================================================
+# VALIDATE INSTANCE
+# ==================================================================================================
+#
+# PURPOSE:
+#
+# Reject malformed fixed-instance data before any downstream computation
+# is trusted.
+#
+#
+# FAILURE CONTRACT:
+#
+#     invalid instance -> raise ValueError immediately
+#
+# The validator is fail-fast:
+#
+#     the first discovered violation stops execution.
+#
+# Each error message should name the offending worker or shift whenever
+# there is a specific culprit.
+#
+#
+# CHECK 1 — NONEMPTY WORKER SET
+#
+# Require:
+#
+#     WORKERS != empty
+#
+#
+# CHECK 2 — NO SELF-PAIRING
+#
+# Every shift:
+#
+#     (shift_id, worker1, worker2)
+#
+# must satisfy:
+#
+#     worker1 != worker2
+#
+# Example invalid shift:
+#
+#     ("s3", "c", "c")
+#
+#
+# CHECK 3 — KNOWN SHIFT ENDPOINTS
+#
+# Every endpoint appearing in SHIFTS must belong to WORKERS.
+#
+# Require:
+#
+#     worker1 in WORKERS
+#     worker2 in WORKERS
+#
+# Example invalid shift:
+#
+#     ("s3", "c", "x")
+#
+# where:
+#
+#     "x" not in WORKERS
+#
+#
+# CHECK 4 — UNIQUE SHIFT IDs
+#
+# Every physical shift copy must have its own unique ID.
+#
+# Parallel shifts are allowed to have:
+#
+#     the same endpoints
+#
+# but must have:
+#
+#     different IDs.
+#
+# The uniqueness check uses a seen-set walk:
+#
+#     seen_shift_ids = set()
+#
+# For each shift ID:
+#
+#     if already seen:
+#         raise ValueError
+#
+#     otherwise:
+#         add it to seen_shift_ids
+#
+# This invariant is essential because later fringe sets and candidate S
+# values will represent physical shifts by ID.
+#
+# Duplicate IDs could otherwise collapse distinct physical copies when
+# converted to a frozenset and silently corrupt |S|.
+#
+#
+# CHECK 5 — POSITIVE INTEGER SKILL VALUES
+#
+# Every worker must have a skill value.
+#
+# Every skill value must satisfy:
+#
+#     type(skill_value) is int
+#
+# and:
+#
+#     skill_value > 0
+#
+# Using exact type comparison deliberately rejects Boolean values.
+#
+#
+# IMPORTANT NON-CHECK:
+#
+# There is NO skill-versus-degree condition in this problem.
+#
+# The F7 capstone's condition:
+#
+#     f(v) <= d(v)
+#
+# must NOT be pattern-replayed here.
+#
+# ==================================================================================================
+
+
+def validate_instance():
+    # Check 1 — the worker set must be nonempty.
+    if not WORKERS:
+        raise ValueError("WORKERS must be nonempty")
+
+    # Check 2 — no shift may pair a worker with themselves.
+    for shift_id, worker1, worker2 in SHIFTS:
+        if worker1 == worker2:
+            raise ValueError(
+                f"shift {shift_id} self-pairs worker {worker1!r}"
+            )
+
+    # Check 3 — every shift endpoint must be a known worker.
+    for shift_id, worker1, worker2 in SHIFTS:
+        if worker1 not in WORKERS:
+            raise ValueError(
+                f"shift {shift_id} has unknown worker {worker1!r}"
+            )
+
+        if worker2 not in WORKERS:
+            raise ValueError(
+                f"shift {shift_id} has unknown worker {worker2!r}"
+            )
+
+    # Check 4 — every physical shift copy must have a unique shift ID.
+    seen_shift_ids = set()
+
+    for shift_id, _worker1, _worker2 in SHIFTS:
+        if shift_id in seen_shift_ids:
+            raise ValueError(f"duplicate shift ID {shift_id!r}")
+
+        seen_shift_ids.add(shift_id)
+
+    # Check 5 — every worker must have a positive integer skill value.
+    for worker in WORKERS:
+        if worker not in SKILL_VALUES:
+            raise ValueError(f"missing skill value for worker {worker!r}")
+
+        skill_value = SKILL_VALUES[worker]
+
+        if type(skill_value) is not int or skill_value <= 0:
+            raise ValueError(
+                f"skill({worker}) must be a positive integer, "
+                f"got {skill_value!r}"
+            )
+````
+
+Now save `mock_instance.py` and run:
+
+```bash
+python -c "from mock_instance import validate_instance; validate_instance(); print('mock instance valid')"
+```
+
+Prediction:
+
+```text
+mock instance valid
+```
+
+Then:
+
+```bash
+python mock_instance.py
+```
+
+Prediction: **silent**.
+
+Bring me those two outputs next. Then we will deliberately break the **duplicate-ID guard** and **unknown-worker guard**, predict their exact messages, prove them rejecting, restore the instance, and only then make the `mock1:` instance commit.
+==================================================================================================================================================================
+
+Excellent. Both predictions matched exactly:
+
+```text
+python -c "... validate_instance() ..."
+→ mock instance valid
+```
+
+and:
+
+```text
+python mock_instance.py
+→ silent
+```
+
+That establishes two different facts:
+
+1. **The correct instance passes all five guards.**
+2. **`mock_instance.py` is a clean module**: merely executing/importing it does not automatically validate or print anything.
+
+Now we prove the guards reject malformed data. We will do **one corruption at a time**, because the validator is fail-fast.
+
+# Step 2A — Break the Unique-Shift-ID Invariant
+
+We start with the more dangerous invariant: duplicate shift IDs.
+
+The valid first two shifts are:
+
+```python
+("s0", "a", "b"),
+("s1", "a", "b"),
+```
+
+They are parallel copies:
+
+```text
+same endpoints
+different IDs
+```
+
+We will temporarily corrupt the second one to:
+
+```python
+("s0", "a", "b"),
+```
+
+giving:
+
+```python
+("s0", "a", "b"),
+("s0", "a", "b"),
+```
+
+There are still physically two entries in the `SHIFTS` list, but they now claim the same identity.
+
+---
+
+## Predict Before Running
+
+Look at the validator's order:
+
+```text
+Check 1 — WORKERS nonempty
+Check 2 — no self-pairing
+Check 3 — every endpoint known
+Check 4 — unique shift IDs
+Check 5 — positive integer skills
+```
+
+With our deliberate corruption:
+
+### Check 1
+
+`WORKERS` is still:
+
+```python
+frozenset({"a", "b", "c", "d"})
+```
+
+so:
+
+```text
+PASS
+```
+
+### Check 2
+
+Both corrupted shifts are still:
+
+```text
+(a,b)
+```
+
+with:
+
+```text
+a != b
+```
+
+so:
+
+```text
+PASS
+```
+
+### Check 3
+
+Both `a` and `b` still belong to `WORKERS`.
+
+So:
+
+```text
+PASS
+```
+
+### Check 4
+
+Now the seen-set walk begins.
+
+Initially:
+
+```python
+seen_shift_ids = set()
+```
+
+which means:
+
+```text
+seen_shift_ids = {}
+conceptually empty
+```
+
+First shift:
+
+```text
+shift_id = "s0"
+```
+
+Question:
+
+```python
+"s0" in seen_shift_ids
+```
+
+Answer:
+
+```text
+False
+```
+
+So we execute:
+
+```python
+seen_shift_ids.add("s0")
+```
+
+Now:
+
+```text
+seen_shift_ids = {"s0"}
+```
+
+Second shift:
+
+```text
+shift_id = "s0"
+```
+
+Question:
+
+```python
+"s0" in seen_shift_ids
+```
+
+Answer:
+
+```text
+True
+```
+
+So this fires:
+
+```python
+raise ValueError(f"duplicate shift ID {shift_id!r}")
+```
+
+Because:
+
+```python
+shift_id == "s0"
+```
+
+and `!r` uses the representation of the string, the exact message is:
+
+```text
+duplicate shift ID 's0'
+```
+
+Therefore the final traceback line should be **exactly**:
+
+```text
+ValueError: duplicate shift ID 's0'
+```
+
+Check 5 should never run because the validator stops immediately at Check 4.
+
+---
+
+# Why This Test Matters More Than Just Seeing an Exception
+
+We are proving the exact failure mode that would otherwise be dangerous.
+
+Without this guard, later we could have:
+
+```text
+physical shift 1 → "s0"
+physical shift 2 → "s0"
+```
+
+and a fringe list could conceptually contain:
+
+```python
+["s0", "s0"]
+```
+
+But later candidate (S) will become a `frozenset`:
+
+```python
+frozenset(["s0", "s0"])
+```
+
+which becomes:
+
+```python
+frozenset({"s0"})
+```
+
+Its length is:
+
+```python
+1
+```
+
+even though two physical shifts were selected.
+
+That changes:
+
+[
+|S|
+]
+
+and therefore can change:
+
+* admissibility,
+* numerator,
+* denominator,
+* objective,
+* search result.
+
+Worse, it could happen **silently**.
+
+So the validator is preventing representation corruption, not merely enforcing pretty IDs.
+
+---
+
+# What to Do Now
+
+Replace `mock_instance.py` temporarily with the complete version below.
+
+Then run:
+
+```bash
+python -c "from mock_instance import validate_instance; validate_instance()"
+```
+
+Do **not** add a `print("valid")` this time.
+
+We expect the function to fail.
+
+### Exact predicted last line
+
+```text
+ValueError: duplicate shift ID 's0'
+```
+
+Paste the traceback's last line when you get it.
+
+Do **not commit this broken version**.
+
+After we see the duplicate-ID guard fire, we will restore `s1`, then deliberately break an endpoint and prove the unknown-worker guard fires.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Step 2A — Proving the Unique-Shift-ID Guard Rejects
+
+The valid instance first passed all five instance guards:
+
+```bash
+python -c "from mock_instance import validate_instance; validate_instance(); print('mock instance valid')"
+````
+
+produced:
+
+```text
+mock instance valid
+```
+
+Running the module directly:
+
+```bash
+python mock_instance.py
+```
+
+produced no output.
+
+This establishes two separate properties:
+
+1. the valid instance passes validation;
+2. `mock_instance.py` remains silent and import-safe.
+
+---
+
+### Why rejection must also be tested
+
+A validator that has only been observed accepting valid data is not fully exercised.
+
+The F1/F7 guard doctrine is:
+
+> Prove that a guard rejects the malformed input it was designed to reject, not merely that valid input passes.
+
+Because `validate_instance()` is fail-fast, corrupt only one invariant at a time.
+
+---
+
+### Deliberate duplicate-ID corruption
+
+The correct parallel shifts are:
+
+```python
+("s0", "a", "b")
+("s1", "a", "b")
+```
+
+Parallel copies are allowed to have the same endpoints, but they must have different IDs.
+
+For the rejection test, temporarily change the second copy to:
+
+```python
+("s0", "a", "b")
+```
+
+so the first two entries become:
+
+```python
+("s0", "a", "b")
+("s0", "a", "b")
+```
+
+The graph still contains two physical list entries, but the representation now gives both copies the same identity.
+
+---
+
+### Expected control flow
+
+The validator checks, in order:
+
+```text
+Check 1 — WORKERS nonempty
+Check 2 — no self-pairing
+Check 3 — endpoints known
+Check 4 — shift IDs unique
+Check 5 — positive integer skill values
+```
+
+The deliberate duplicate passes Checks 1–3.
+
+Check 4 uses:
+
+```python
+seen_shift_ids = set()
+```
+
+The walk is:
+
+```text
+first "s0":
+    not in seen_shift_ids
+    add it
+
+seen_shift_ids = {"s0"}
+
+second "s0":
+    already in seen_shift_ids
+    raise ValueError
+```
+
+The exception is constructed by:
+
+```python
+raise ValueError(f"duplicate shift ID {shift_id!r}")
+```
+
+Since:
+
+```text
+shift_id = "s0"
+```
+
+the exact expected traceback line is:
+
+```text
+ValueError: duplicate shift ID 's0'
+```
+
+The `!r` conversion displays the string representation, including quotes.
+
+---
+
+### Why duplicate IDs are dangerous
+
+Later, fringe shifts are represented by shift IDs and candidate `S` values become `frozenset`s.
+
+If two physical shift copies shared one ID, something conceptually like:
+
+```python
+["s0", "s0"]
+```
+
+would become:
+
+```python
+frozenset({"s0"})
+```
+
+The two physical copies would collapse into one set element.
+
+Then:
+
+```text
+|S|
+```
+
+would silently undercount selected physical shifts.
+
+Because `|S|` appears in:
+
+```text
+admissibility parity
+lower-bound condition
+objective numerator
+objective denominator
+```
+
+the entire mathematical search could be corrupted without an obvious crash.
+
+Therefore:
+
+> Unique shift IDs are a representation invariant, not cosmetic metadata.
+
+---
+
+### Predicted rejection command
+
+```bash
+python -c "from mock_instance import validate_instance; validate_instance()"
+```
+
+Expected final traceback line:
+
+```text
+ValueError: duplicate shift ID 's0'
+```
+
+The broken instance must never be committed.
+
+````
+
+# COPY INTO `mock_instance.py`
+
+```python
+# ==================================================================================================
+# MOCK EXIT 1 — CREW-ASSIGNMENT INSTANCE
+# ==================================================================================================
+#
+# PURPOSE:
+#
+# Store the fixed Crew-Assignment Density instance and validate the
+# graph-level assumptions required by every later checker component.
+#
+#
+# THIS MODULE CONTAINS:
+#
+# 1. WORKERS
+# 2. SHIFTS
+# 3. SKILL_VALUES
+# 4. validate_instance()
+#
+#
+# RESPONSIBILITY BOUNDARY:
+#
+# This module validates the INSTANCE.
+#
+# It does NOT:
+#
+#     - judge candidate admissibility,
+#     - evaluate the objective,
+#     - enumerate candidate pairs,
+#     - search for a maximizer.
+#
+# Those belong to later modules.
+#
+#
+# MODULE BEHAVIOR:
+#
+# This file is intentionally silent.
+#
+# Importing it should define data and functions without printing or
+# automatically running validation.
+#
+# ==================================================================================================
+
+
+# ==================================================================================================
+# WORKERS
+# ==================================================================================================
+#
+# The fixed worker set is:
+#
+#     {a, b, c, d}
+#
+# A frozenset is used because:
+#
+#     - workers form a mathematical set,
+#     - order is not mathematically significant,
+#     - duplicates should not exist,
+#     - membership checks are natural,
+#     - the fixed instance should not accidentally mutate this set.
+#
+# ==================================================================================================
+
+
+WORKERS = frozenset({"a", "b", "c", "d"})
+
+
+# ==================================================================================================
+# SHIFTS
+# ==================================================================================================
+#
+# Every physical shift copy has the form:
+#
+#     (shift_id, worker1, worker2)
+#
+# IMPORTANT:
+#
+# This version is TEMPORARILY CORRUPTED to exercise the unique-ID guard.
+#
+# The correct parallel copies are:
+#
+#     ("s0", "a", "b")
+#     ("s1", "a", "b")
+#
+# For this rejection test, both are temporarily assigned:
+#
+#     "s0"
+#
+# The validator should reject the second occurrence.
+#
+# This broken version must not be committed.
+#
+# ==================================================================================================
+
+
+SHIFTS = [
+    ("s0", "a", "b"),
+    ("s0", "a", "b"),  # TEMPORARY BREAK — correct ID is "s1"
+    ("s2", "b", "c"),
+    ("s3", "c", "d"),
+]
+
+
+# ==================================================================================================
+# SKILL VALUES
+# ==================================================================================================
+#
+# Skill is a positive-integer function on workers:
+#
+#     a -> 1
+#     b -> 1
+#     c -> 2
+#     d -> 2
+#
+# ==================================================================================================
+
+
+SKILL_VALUES = {
+    "a": 1,
+    "b": 1,
+    "c": 2,
+    "d": 2,
+}
+
+
+# ==================================================================================================
+# VALIDATE INSTANCE
+# ==================================================================================================
+#
+# FAILURE CONTRACT:
+#
+#     invalid instance -> raise ValueError immediately
+#
+# The validator is fail-fast.
+#
+#
+# CHECK 1 — NONEMPTY WORKER SET
+#
+#     WORKERS must be nonempty.
+#
+#
+# CHECK 2 — NO SELF-PAIRING
+#
+#     Every shift must satisfy:
+#
+#         worker1 != worker2
+#
+#
+# CHECK 3 — KNOWN SHIFT ENDPOINTS
+#
+#     Every endpoint must belong to WORKERS.
+#
+#
+# CHECK 4 — UNIQUE SHIFT IDs
+#
+#     Every physical shift copy must have its own ID.
+#
+# The check uses:
+#
+#     seen_shift_ids = set()
+#
+# and scans the shifts in stable list order.
+#
+# For this temporary broken instance:
+#
+#     first "s0"  -> unseen -> add
+#     second "s0" -> already seen -> raise
+#
+# Exact predicted error:
+#
+#     ValueError: duplicate shift ID 's0'
+#
+#
+# CHECK 5 — POSITIVE INTEGER SKILL VALUES
+#
+#     Every worker must have a skill value.
+#
+#     Every skill must satisfy:
+#
+#         type(skill_value) is int
+#         skill_value > 0
+#
+#
+# IMPORTANT:
+#
+# There is no skill-versus-degree condition in this problem.
+#
+# ==================================================================================================
+
+
+def validate_instance():
+    # Check 1 — the worker set must be nonempty.
+    if not WORKERS:
+        raise ValueError("WORKERS must be nonempty")
+
+    # Check 2 — no shift may pair a worker with themselves.
+    for shift_id, worker1, worker2 in SHIFTS:
+        if worker1 == worker2:
+            raise ValueError(
+                f"shift {shift_id} self-pairs worker {worker1!r}"
+            )
+
+    # Check 3 — every shift endpoint must be a known worker.
+    for shift_id, worker1, worker2 in SHIFTS:
+        if worker1 not in WORKERS:
+            raise ValueError(
+                f"shift {shift_id} has unknown worker {worker1!r}"
+            )
+
+        if worker2 not in WORKERS:
+            raise ValueError(
+                f"shift {shift_id} has unknown worker {worker2!r}"
+            )
+
+    # Check 4 — every physical shift copy must have a unique shift ID.
+    seen_shift_ids = set()
+
+    for shift_id, _worker1, _worker2 in SHIFTS:
+        if shift_id in seen_shift_ids:
+            raise ValueError(f"duplicate shift ID {shift_id!r}")
+
+        seen_shift_ids.add(shift_id)
+
+    # Check 5 — every worker must have a positive integer skill value.
+    for worker in WORKERS:
+        if worker not in SKILL_VALUES:
+            raise ValueError(f"missing skill value for worker {worker!r}")
+
+        skill_value = SKILL_VALUES[worker]
+
+        if type(skill_value) is not int or skill_value <= 0:
+            raise ValueError(
+                f"skill({worker}) must be a positive integer, "
+                f"got {skill_value!r}"
+            )
+````
+
+Run:
+
+```bash
+python -c "from mock_instance import validate_instance; validate_instance()"
+```
+
+Expected last line:
+
+```text
+ValueError: duplicate shift ID 's0'
+```
+
+Once you paste that result, we restore the correct `"s1"` and move directly to the **unknown-worker endpoint break**.
+
+==================================================================================================================================================================
+
+Perfect. ✅ The duplicate-ID guard has now been **proven rejecting**, not merely written.
+
+The exact predicted line appeared:
+
+```text
+ValueError: duplicate shift ID 's0'
+```
+
+That establishes that the `seen_shift_ids` walk works as intended.
+
+Now we move to the second high-risk structural invariant: **every shift endpoint must be a known worker**.
+
+# Step 2B — Prove the Unknown-Worker Guard Rejects
+
+First, restore the duplicate-ID corruption.
+
+Change:
+
+```python
+("s0", "a", "b"),
+("s0", "a", "b"),
+```
+
+back to:
+
+```python
+("s0", "a", "b"),
+("s1", "a", "b"),
+```
+
+Now deliberately corrupt `s3`.
+
+The correct shift is:
+
+```python
+("s3", "c", "d"),
+```
+
+Temporarily change it to:
+
+```python
+("s3", "c", "x"),
+```
+
+where:
+
+```text
+"x" not in WORKERS
+```
+
+Our worker set is only:
+
+```python
+frozenset({"a", "b", "c", "d"})
+```
+
+---
+
+## Predict the Control Flow Before Running
+
+The validator is ordered:
+
+```text
+Check 1 — WORKERS nonempty
+Check 2 — no self-pairing
+Check 3 — every endpoint known
+Check 4 — unique shift IDs
+Check 5 — positive integer skills
+```
+
+For the deliberately malformed shift:
+
+```python
+("s3", "c", "x")
+```
+
+### Check 1
+
+`WORKERS` is still nonempty.
+
+```text
+PASS
+```
+
+### Check 2
+
+The endpoints are:
+
+```text
+"c"
+"x"
+```
+
+and:
+
+```python
+"c" != "x"
+```
+
+so it is not a self-pairing loop.
+
+```text
+PASS
+```
+
+### Check 3
+
+The validator first asks:
+
+```python
+worker1 not in WORKERS
+```
+
+Here:
+
+```python
+worker1 == "c"
+```
+
+and `"c"` is known.
+
+So that part passes.
+
+Then it asks:
+
+```python
+worker2 not in WORKERS
+```
+
+Here:
+
+```python
+worker2 == "x"
+```
+
+and:
+
+```text
+"x" not in {"a", "b", "c", "d"}
+```
+
+So this guard fires:
+
+```python
+raise ValueError(
+    f"shift {shift_id} has unknown worker {worker2!r}"
+)
+```
+
+Substitute:
+
+```text
+shift_id = "s3"
+worker2 = "x"
+```
+
+The exact constructed message is:
+
+```text
+shift s3 has unknown worker 'x'
+```
+
+Therefore the traceback's final line should be exactly:
+
+```text
+ValueError: shift s3 has unknown worker 'x'
+```
+
+Checks 4 and 5 are never reached because the validator is fail-fast.
+
+---
+
+# Why We Put This Check Before Anything Derived From the Edges
+
+Suppose we did **not** validate endpoint membership.
+
+Later code may reasonably assume:
+
+> Every endpoint appearing in `SHIFTS` is actually a worker in this graph.
+
+A malformed endpoint could then produce a mechanical failure somewhere else—or worse, contaminate a graph computation.
+
+The validator gives us the semantic diagnosis immediately:
+
+```text
+shift s3 has unknown worker 'x'
+```
+
+rather than making us reverse-engineer some later failure.
+
+This is the same hardening principle you learned in the capstone:
+
+> Validate the prerequisites of a computation before performing that computation.
+
+---
+
+# Run the Break Test
+
+After pasting the temporary broken file below, run:
+
+```bash
+python -c "from mock_instance import validate_instance; validate_instance()"
+```
+
+### Prediction
+
+The traceback should end:
+
+```text
+ValueError: shift s3 has unknown worker 'x'
+```
+
+Do **not** commit this version.
+
+Once we see that exact line, we will:
+
+1. restore `s3` to `("s3", "c", "d")`;
+2. run the passing validation again;
+3. run `python mock_instance.py` and confirm silence;
+4. lint `mock_instance.py`;
+5. commit the completed instance module.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Step 2B — Proving the Unknown-Worker Guard Rejects
+
+The duplicate-shift-ID guard was exercised first.
+
+The temporary corruption:
+
+```python
+("s0", "a", "b")
+("s0", "a", "b")
+````
+
+produced the exact expected failure:
+
+```text
+ValueError: duplicate shift ID 's0'
+```
+
+This proves the unique-ID guard actually rejects duplicated physical-shift identities.
+
+The instance must now be restored before testing a different guard, because `validate_instance()` is fail-fast. If the duplicate ID remained present, it could mask a later violation.
+
+---
+
+### Deliberate Unknown-Worker Corruption
+
+Restore the correct parallel IDs:
+
+```python
+("s0", "a", "b")
+("s1", "a", "b")
+```
+
+Then temporarily change:
+
+```python
+("s3", "c", "d")
+```
+
+to:
+
+```python
+("s3", "c", "x")
+```
+
+The fixed worker set is:
+
+```text
+{a,b,c,d}
+```
+
+so:
+
+```text
+"x" not in WORKERS
+```
+
+---
+
+### Predicted Control Flow
+
+The validator order is:
+
+```text
+Check 1 — nonempty WORKERS
+Check 2 — no self-pairing
+Check 3 — known endpoints
+Check 4 — unique shift IDs
+Check 5 — positive integer skills
+```
+
+For:
+
+```python
+("s3", "c", "x")
+```
+
+Check 1 passes because the worker set is nonempty.
+
+Check 2 passes because:
+
+```text
+"c" != "x"
+```
+
+Check 3 then examines the endpoints.
+
+The first endpoint:
+
+```text
+"c"
+```
+
+belongs to `WORKERS`.
+
+The second endpoint:
+
+```text
+"x"
+```
+
+does not.
+
+Therefore the validator executes:
+
+```python
+raise ValueError(
+    f"shift {shift_id} has unknown worker {worker2!r}"
+)
+```
+
+With:
+
+```text
+shift_id = "s3"
+worker2 = "x"
+```
+
+the exact expected traceback line is:
+
+```text
+ValueError: shift s3 has unknown worker 'x'
+```
+
+Because validation is fail-fast, Checks 4 and 5 are not executed after this failure.
+
+---
+
+### Why This Guard Matters
+
+A structural data layer should reject malformed graph objects at the point where their actual contract is known.
+
+An unknown endpoint is not merely a later dictionary or membership problem.
+
+The actual violation is:
+
+> A shift refers to a worker that does not belong to the graph.
+
+Naming that violation directly makes failures easier to diagnose and prevents downstream code from operating under a false assumption.
+
+The broader rule is:
+
+> Validate the prerequisites of a computation before performing the computation.
+
+---
+
+### Break-Test Command
+
+Run:
+
+```bash
+python -c "from mock_instance import validate_instance; validate_instance()"
+```
+
+Predicted final traceback line:
+
+```text
+ValueError: shift s3 has unknown worker 'x'
+```
+
+This deliberately corrupted version must not be committed.
+
+After the rejection is observed, restore:
+
+```python
+("s3", "c", "d")
+```
+
+before making the instance-module commit.
+
+````
+
+# COPY INTO `mock_instance.py`
+
+```python
+# ==================================================================================================
+# MOCK EXIT 1 — CREW-ASSIGNMENT INSTANCE
+# ==================================================================================================
+#
+# PURPOSE:
+#
+# Store the fixed Crew-Assignment Density instance and validate the
+# graph-level assumptions required by every later checker component.
+#
+#
+# THIS MODULE CONTAINS:
+#
+# 1. WORKERS
+# 2. SHIFTS
+# 3. SKILL_VALUES
+# 4. validate_instance()
+#
+#
+# RESPONSIBILITY BOUNDARY:
+#
+# This module validates the INSTANCE.
+#
+# It does NOT:
+#
+#     - judge candidate admissibility,
+#     - evaluate the objective,
+#     - enumerate candidate pairs,
+#     - search for a maximizer.
+#
+# Those belong to later modules.
+#
+#
+# MODULE BEHAVIOR:
+#
+# This file is intentionally silent.
+#
+# Importing it should define data and functions without printing or
+# automatically running validation.
+#
+# ==================================================================================================
+
+
+# ==================================================================================================
+# WORKERS
+# ==================================================================================================
+#
+# The fixed worker set is:
+#
+#     {a, b, c, d}
+#
+# A frozenset is used because:
+#
+#     - workers form a mathematical set,
+#     - order is not mathematically significant,
+#     - duplicates should not exist,
+#     - membership checks are natural,
+#     - the fixed instance should not accidentally mutate this set.
+#
+# ==================================================================================================
+
+
+WORKERS = frozenset({"a", "b", "c", "d"})
+
+
+# ==================================================================================================
+# SHIFTS
+# ==================================================================================================
+#
+# Every physical shift copy has the form:
+#
+#     (shift_id, worker1, worker2)
+#
+# The correct fixed instance is:
+#
+#     s0 = (a, b)
+#     s1 = (a, b)    parallel copy
+#     s2 = (b, c)
+#     s3 = (c, d)
+#
+#
+# IMPORTANT:
+#
+# This version is TEMPORARILY CORRUPTED to exercise the
+# known-endpoint guard.
+#
+# The correct final shift:
+#
+#     ("s3", "c", "d")
+#
+# is temporarily replaced by:
+#
+#     ("s3", "c", "x")
+#
+# Since:
+#
+#     "x" not in WORKERS
+#
+# validate_instance() must reject it before later code can trust the graph.
+#
+# This broken version must not be committed.
+#
+# ==================================================================================================
+
+
+SHIFTS = [
+    ("s0", "a", "b"),
+    ("s1", "a", "b"),
+    ("s2", "b", "c"),
+    ("s3", "c", "x"),  # TEMPORARY BREAK — correct endpoint is "d"
+]
+
+
+# ==================================================================================================
+# SKILL VALUES
+# ==================================================================================================
+#
+# Skill is a positive-integer function on workers:
+#
+#     a -> 1
+#     b -> 1
+#     c -> 2
+#     d -> 2
+#
+# A dictionary represents:
+#
+#     worker -> skill value
+#
+# ==================================================================================================
+
+
+SKILL_VALUES = {
+    "a": 1,
+    "b": 1,
+    "c": 2,
+    "d": 2,
+}
+
+
+# ==================================================================================================
+# VALIDATE INSTANCE
+# ==================================================================================================
+#
+# PURPOSE:
+#
+# Reject malformed fixed-instance data before any downstream computation
+# is trusted.
+#
+#
+# FAILURE CONTRACT:
+#
+#     invalid instance -> raise ValueError immediately
+#
+# The validator is fail-fast.
+#
+#
+# CHECK 1 — NONEMPTY WORKER SET
+#
+# Require:
+#
+#     WORKERS != empty
+#
+#
+# CHECK 2 — NO SELF-PAIRING
+#
+# Every shift:
+#
+#     (shift_id, worker1, worker2)
+#
+# must satisfy:
+#
+#     worker1 != worker2
+#
+#
+# CHECK 3 — KNOWN SHIFT ENDPOINTS
+#
+# Every endpoint appearing in SHIFTS must belong to WORKERS.
+#
+# Require:
+#
+#     worker1 in WORKERS
+#     worker2 in WORKERS
+#
+# For the temporary broken shift:
+#
+#     ("s3", "c", "x")
+#
+# the first endpoint is known:
+#
+#     "c" in WORKERS
+#
+# but the second is not:
+#
+#     "x" not in WORKERS
+#
+# Exact predicted failure:
+#
+#     ValueError: shift s3 has unknown worker 'x'
+#
+#
+# CHECK 4 — UNIQUE SHIFT IDs
+#
+# Every physical shift copy must have its own unique ID.
+#
+# Parallel shifts may share endpoints but may not share IDs.
+#
+# The uniqueness check uses a seen-set walk:
+#
+#     seen_shift_ids = set()
+#
+#
+# CHECK 5 — POSITIVE INTEGER SKILL VALUES
+#
+# Every worker must have a skill value.
+#
+# Every skill value must satisfy:
+#
+#     type(skill_value) is int
+#     skill_value > 0
+#
+#
+# IMPORTANT NON-CHECK:
+#
+# There is no skill-versus-degree condition in this problem.
+#
+# ==================================================================================================
+
+
+def validate_instance():
+    # Check 1 — the worker set must be nonempty.
+    if not WORKERS:
+        raise ValueError("WORKERS must be nonempty")
+
+    # Check 2 — no shift may pair a worker with themselves.
+    for shift_id, worker1, worker2 in SHIFTS:
+        if worker1 == worker2:
+            raise ValueError(
+                f"shift {shift_id} self-pairs worker {worker1!r}"
+            )
+
+    # Check 3 — every shift endpoint must be a known worker.
+    for shift_id, worker1, worker2 in SHIFTS:
+        if worker1 not in WORKERS:
+            raise ValueError(
+                f"shift {shift_id} has unknown worker {worker1!r}"
+            )
+
+        if worker2 not in WORKERS:
+            raise ValueError(
+                f"shift {shift_id} has unknown worker {worker2!r}"
+            )
+
+    # Check 4 — every physical shift copy must have a unique shift ID.
+    seen_shift_ids = set()
+
+    for shift_id, _worker1, _worker2 in SHIFTS:
+        if shift_id in seen_shift_ids:
+            raise ValueError(f"duplicate shift ID {shift_id!r}")
+
+        seen_shift_ids.add(shift_id)
+
+    # Check 5 — every worker must have a positive integer skill value.
+    for worker in WORKERS:
+        if worker not in SKILL_VALUES:
+            raise ValueError(f"missing skill value for worker {worker!r}")
+
+        skill_value = SKILL_VALUES[worker]
+
+        if type(skill_value) is not int or skill_value <= 0:
+            raise ValueError(
+                f"skill({worker}) must be a positive integer, "
+                f"got {skill_value!r}"
+            )
+````
+
+Now run:
+
+```bash
+python -c "from mock_instance import validate_instance; validate_instance()"
+```
+
+and paste the **last traceback line**. We are expecting:
+
+```text
+ValueError: shift s3 has unknown worker 'x'
+```
+
+> **RULE TO BANK:** With a fail-fast validator, restore the previous deliberate corruption before testing the next invariant. Otherwise an earlier guard can mask the one you intended to prove.
+
+==================================================================================================================================================================
+
+Excellent. The second structural guard also fired **exactly as predicted**:
+
+```text
+ValueError: shift s3 has unknown worker 'x'
+```
+
+So we have now proved both of the highest-risk representation invariants reject bad data:
+
+```text
+duplicate shift ID      → rejected ✓
+unknown shift endpoint  → rejected ✓
+```
+
+Now we restore the instance, prove the valid state again, lint only this mock file, and commit Step 2.
+
+# Step 2C — Restore and Close the Instance Module
+
+## 1. Restore `s3`
+
+Change the temporary broken shift:
+
+```python
+("s3", "c", "x"),
+```
+
+back to:
+
+```python
+("s3", "c", "d"),
+```
+
+The final `SHIFTS` list must therefore be:
+
+```python
+SHIFTS = [
+    ("s0", "a", "b"),
+    ("s1", "a", "b"),
+    ("s2", "b", "c"),
+    ("s3", "c", "d"),
+]
+```
+
+We also want the comments in `mock_instance.py` restored to describe the **real instance**, not a temporary break test. The complete clean file is at the end of this response.
+
+---
+
+# 2. Re-prove the Passing Case
+
+After saving the restored file, run:
+
+```bash
+python -c "from mock_instance import validate_instance; validate_instance(); print('mock instance valid')"
+```
+
+## Prediction
+
+All five checks should pass:
+
+```text
+Check 1 — WORKERS nonempty             ✓
+Check 2 — no self-pairing              ✓
+Check 3 — all endpoints known          ✓
+Check 4 — all shift IDs unique         ✓
+Check 5 — all skills positive integers ✓
+```
+
+Then the explicit terminal print executes.
+
+Expected output:
+
+```text
+mock instance valid
+```
+
+This matters because after deliberately corrupting data, we always verify that we restored the canonical instance correctly.
+
+---
+
+# 3. Confirm the Module Is Silent Again
+
+Run:
+
+```bash
+python mock_instance.py
+```
+
+Prediction:
+
+```text
+no output
+```
+
+Why?
+
+Because the file contains only:
+
+```text
+constants
+function definitions
+```
+
+It has no top-level:
+
+```python
+validate_instance()
+```
+
+and no top-level `print()`.
+
+This is the same module discipline you learned earlier:
+
+> Importing a module should not unexpectedly execute demonstrations or validation unless that behavior is deliberately part of the module contract.
+
+---
+
+# 4. Run a Scoped Ruff Check
+
+We do **not** want:
+
+```bash
+ruff check .
+```
+
+because that would drag historical files into this mock step.
+
+Instead:
+
+```bash
+ruff check mock_instance.py
+```
+
+Prediction:
+
+```text
+All checks passed!
+```
+
+If Ruff reports something in `mock_instance.py`, paste it before changing anything.
+
+---
+
+# 5. Inspect Git Before Staging
+
+Run:
+
+```bash
+git status
+```
+
+You will likely see `mock_instance.py` as a new file and `mock_notes_1.md` as modified if you have been adding the notes blocks.
+
+That is fine.
+
+We are going to keep implementation and learning notes as separate commits.
+
+---
+
+# 6. Commit the Instance Module
+
+Stage **only** the implementation:
+
+```bash
+git add mock_instance.py
+```
+
+Check:
+
+```bash
+git status
+```
+
+You want `mock_instance.py` under:
+
+```text
+Changes to be committed:
+```
+
+and `mock_notes_1.md`, if modified, should remain unstaged.
+
+Now commit:
+
+```bash
+git commit -m "mock1: add validated crew-assignment instance"
+```
+
+Then verify:
+
+```bash
+git log -1 --oneline
+```
+
+You should see the new `mock1:` commit.
+
+---
+
+# 7. Commit the Notes for This Phase
+
+Then stage the accumulated notes:
+
+```bash
+git add mock_notes_1.md
+```
+
+Commit:
+
+```bash
+git commit -m "mock1: document instance design and validation proofs"
+```
+
+Finally:
+
+```bash
+git status
+```
+
+Prediction:
+
+```text
+nothing to commit, working tree clean
+```
+
+At that point our repository history tells a very clean story:
+
+```text
+oracle mathematically derived
+        ↓
+oracle committed
+        ↓
+problem-analysis notes committed
+        ↓
+instance representation implemented
+        ↓
+guards deliberately broken and proven
+        ↓
+valid instance restored
+        ↓
+instance implementation committed
+        ↓
+validation learning notes committed
+```
+
+Only after that do we move to the three mathematical primitives.
+
+---
+
+# What We Have Built So Far
+
+Notice the layering:
+
+```text
+MOCK_ORACLE.md
+    tells us what is mathematically true
+
+mock_instance.py
+    tells the program what the fixed data is
+    and proves the data satisfies its structural contract
+```
+
+We have **not** yet taught Python what:
+
+```text
+skill(W)
+i(W)
+∂(W)
+```
+
+mean.
+
+Those will be the next module:
+
+```text
+mock_primitives.py
+```
+
+And the oracle already gives us hand-computed values we can use to predict those functions before running them.
+
+For example, we already know:
+
+```text
+skill({a,b,c}) = 4
+
+i({a,b}) = 2
+
+i({a,b,c}) = 3
+
+∂({a,b}) = {s2}
+
+∂({b}) = {s0,s1,s2}
+
+∂(WORKERS) = ∅
+```
+
+That is the next important transition:
+
+> We derived the quantities mathematically first; now we will encode them as small reusable functions.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Step 2C — Instance Validation Complete
+
+The second deliberate rejection test targeted an unknown shift endpoint.
+
+The temporary malformed shift was:
+
+```python
+("s3", "c", "x")
+````
+
+while the worker set was:
+
+```text
+{a,b,c,d}
+```
+
+Therefore:
+
+```text
+"x" not in WORKERS
+```
+
+The validator correctly reached the known-endpoint guard and raised exactly:
+
+```text
+ValueError: shift s3 has unknown worker 'x'
+```
+
+This proves that malformed shift endpoints are rejected at the instance boundary rather than being allowed to reach downstream computations.
+
+---
+
+### Structural Guards Proven So Far
+
+Two high-risk representation invariants were deliberately broken and observed rejecting:
+
+#### Duplicate shift identity
+
+Temporary corruption:
+
+```python
+("s0", "a", "b")
+("s0", "a", "b")
+```
+
+Observed failure:
+
+```text
+ValueError: duplicate shift ID 's0'
+```
+
+This prevents distinct physical shift copies from silently collapsing when represented later as shift-ID sets.
+
+#### Unknown shift endpoint
+
+Temporary corruption:
+
+```python
+("s3", "c", "x")
+```
+
+Observed failure:
+
+```text
+ValueError: shift s3 has unknown worker 'x'
+```
+
+This ensures every endpoint appearing in the graph actually belongs to the worker set.
+
+---
+
+## Why Break Tests Are Restored One at a Time
+
+`validate_instance()` is fail-fast.
+
+That means:
+
+```text
+first violation found
+→ raise
+→ stop execution
+```
+
+Therefore each deliberate corruption must be restored before testing another guard.
+
+Otherwise an earlier violation can mask the later guard that the test is supposed to exercise.
+
+The workflow is:
+
+```text
+valid instance
+    ↓
+introduce exactly one corruption
+    ↓
+predict exact failure
+    ↓
+run validator
+    ↓
+observe intended guard
+    ↓
+restore canonical data
+    ↓
+move to next corruption
+```
+
+---
+
+## Canonical Instance Restored
+
+After the break tests, the shift data is restored to:
+
+```python
+SHIFTS = [
+    ("s0", "a", "b"),
+    ("s1", "a", "b"),
+    ("s2", "b", "c"),
+    ("s3", "c", "d"),
+]
+```
+
+The valid instance should again satisfy all five guards:
+
+```text
+1. WORKERS is nonempty.
+2. No shift self-pairs a worker.
+3. Every shift endpoint belongs to WORKERS.
+4. Every physical shift copy has a unique shift ID.
+5. Every worker has a positive integer skill value.
+```
+
+The passing validation command is:
+
+```bash
+python -c "from mock_instance import validate_instance; validate_instance(); print('mock instance valid')"
+```
+
+Expected output:
+
+```text
+mock instance valid
+```
+
+Running:
+
+```bash
+python mock_instance.py
+```
+
+should remain silent because the module contains only data and function definitions.
+
+---
+
+## Scoped Tooling
+
+The mock should be checked without dragging unrelated historical exercises into the tooling pass.
+
+Use:
+
+```bash
+ruff check mock_instance.py
+```
+
+rather than:
+
+```bash
+ruff check .
+```
+
+The scope of a tooling command is part of the command's behavior.
+
+A repository-wide command means repository-wide consequences.
+
+---
+
+## Instance Layer Complete
+
+The software architecture now has two established layers:
+
+```text
+MOCK_ORACLE.md
+    independent mathematical truth
+            ↓
+mock_instance.py
+    fixed data + structural validation
+```
+
+The next layer will encode the three mathematical quantities repeatedly used in the oracle:
+
+```text
+skill(W)
+i(W)
+∂(W)
+```
+
+These belong in:
+
+```text
+mock_primitives.py
+```
+
+The oracle already provides known values that can be used as predictions before the functions are executed.
+
+Examples include:
+
+```text
+skill({a,b,c}) = 4
+
+i({a,b}) = 2
+
+i({a,b,c}) = 3
+
+∂({a,b}) = {s2}
+
+∂({b}) = {s0,s1,s2}
+
+∂(WORKERS) = ∅
+```
+
+The implementation should reproduce these independently hand-derived quantities.
+
+> **RULE TO BANK:** Restore the canonical input after every deliberate break test and re-prove the passing state before committing. A rejection test proves the guard; the final passing run proves the repository was not left corrupted.
+
+````
+
+# COPY INTO `mock_instance.py`
+
+```python
+# ==================================================================================================
+# MOCK EXIT 1 — CREW-ASSIGNMENT INSTANCE
+# ==================================================================================================
+#
+# PURPOSE:
+#
+# Store the fixed Crew-Assignment Density instance and validate the
+# graph-level assumptions required by every later checker component.
+#
+#
+# THIS MODULE CONTAINS:
+#
+# 1. WORKERS
+# 2. SHIFTS
+# 3. SKILL_VALUES
+# 4. validate_instance()
+#
+#
+# RESPONSIBILITY BOUNDARY:
+#
+# This module validates the INSTANCE.
+#
+# It does NOT:
+#
+#     - judge candidate admissibility,
+#     - evaluate the objective,
+#     - enumerate candidate pairs,
+#     - search for a maximizer.
+#
+# Those responsibilities belong to later modules.
+#
+#
+# MODULE BEHAVIOR:
+#
+# This file is intentionally silent.
+#
+# Importing or directly executing it defines data and functions without
+# printing or automatically running validation.
+#
+# ==================================================================================================
+
+
+# ==================================================================================================
+# WORKERS
+# ==================================================================================================
+#
+# The fixed worker set is:
+#
+#     {a, b, c, d}
+#
+# A frozenset is used because:
+#
+#     - workers form a mathematical set,
+#     - order is not mathematically significant,
+#     - duplicates should not exist,
+#     - membership checks are natural,
+#     - the fixed instance should not accidentally mutate this set.
+#
+# ==================================================================================================
+
+
+WORKERS = frozenset({"a", "b", "c", "d"})
+
+
+# ==================================================================================================
+# SHIFTS
+# ==================================================================================================
+#
+# Every physical shift copy has the form:
+#
+#     (shift_id, worker1, worker2)
+#
+# The fixed instance contains:
+#
+#     s0 = (a, b)
+#     s1 = (a, b)    parallel copy of s0
+#     s2 = (b, c)
+#     s3 = (c, d)
+#
+# A list is used because:
+#
+#     - every physical shift copy remains present,
+#     - parallel copies remain distinct,
+#     - stable input order is preserved.
+#
+# IMPORTANT:
+#
+#     s0 and s1 have the same endpoints,
+#
+# but:
+#
+#     s0 != s1
+#
+# because they are distinct physical shifts.
+#
+# Parallel copies therefore have:
+#
+#     same endpoints
+#     different IDs
+#
+# ==================================================================================================
+
+
+SHIFTS = [
+    ("s0", "a", "b"),
+    ("s1", "a", "b"),
+    ("s2", "b", "c"),
+    ("s3", "c", "d"),
+]
+
+
+# ==================================================================================================
+# SKILL VALUES
+# ==================================================================================================
+#
+# Skill is a positive-integer function on workers:
+#
+#     a -> 1
+#     b -> 1
+#     c -> 2
+#     d -> 2
+#
+# A dictionary represents:
+#
+#     worker -> skill value
+#
+# ==================================================================================================
+
+
+SKILL_VALUES = {
+    "a": 1,
+    "b": 1,
+    "c": 2,
+    "d": 2,
+}
+
+
+# ==================================================================================================
+# VALIDATE INSTANCE
+# ==================================================================================================
+#
+# PURPOSE:
+#
+# Reject malformed fixed-instance data before any downstream computation
+# is trusted.
+#
+#
+# FAILURE CONTRACT:
+#
+#     invalid instance -> raise ValueError immediately
+#
+# The validator is fail-fast:
+#
+#     the first discovered violation stops execution.
+#
+# Each failure message names the offending shift or worker whenever there
+# is a specific culprit.
+#
+#
+# CHECK 1 — NONEMPTY WORKER SET
+#
+# Require:
+#
+#     WORKERS != empty
+#
+#
+# CHECK 2 — NO SELF-PAIRING
+#
+# Every shift:
+#
+#     (shift_id, worker1, worker2)
+#
+# must satisfy:
+#
+#     worker1 != worker2
+#
+# Example invalid shift:
+#
+#     ("s3", "c", "c")
+#
+#
+# CHECK 3 — KNOWN SHIFT ENDPOINTS
+#
+# Every endpoint appearing in SHIFTS must belong to WORKERS.
+#
+# Require:
+#
+#     worker1 in WORKERS
+#     worker2 in WORKERS
+#
+# Example invalid shift:
+#
+#     ("s3", "c", "x")
+#
+# where:
+#
+#     "x" not in WORKERS
+#
+#
+# CHECK 4 — UNIQUE SHIFT IDs
+#
+# Every physical shift copy must have its own unique ID.
+#
+# Parallel shifts may have:
+#
+#     the same endpoints
+#
+# but must have:
+#
+#     different IDs.
+#
+# The uniqueness check uses a seen-set walk:
+#
+#     seen_shift_ids = set()
+#
+# For every shift ID:
+#
+#     if the ID has already been seen:
+#         raise ValueError
+#
+#     otherwise:
+#         add the ID to seen_shift_ids
+#
+# This is a representation invariant.
+#
+# Later, fringe shifts and candidate S values will represent physical
+# shift copies by ID.
+#
+# Duplicate IDs could therefore cause two distinct physical shifts to
+# collapse into one element of a frozenset, silently corrupting |S|.
+#
+#
+# CHECK 5 — POSITIVE INTEGER SKILL VALUES
+#
+# Every worker must have a skill value.
+#
+# Every skill value must satisfy:
+#
+#     type(skill_value) is int
+#
+# and:
+#
+#     skill_value > 0
+#
+# Exact type comparison deliberately rejects Boolean values.
+#
+#
+# IMPORTANT NON-CHECK:
+#
+# There is NO skill-versus-degree condition in the Crew-Assignment
+# Density specification.
+#
+# The F7 capstone assumption:
+#
+#     f(v) <= d(v)
+#
+# must not be imported into this problem.
+#
+# ==================================================================================================
+
+
+def validate_instance():
+    # Check 1 — the worker set must be nonempty.
+    if not WORKERS:
+        raise ValueError("WORKERS must be nonempty")
+
+    # Check 2 — no shift may pair a worker with themselves.
+    for shift_id, worker1, worker2 in SHIFTS:
+        if worker1 == worker2:
+            raise ValueError(
+                f"shift {shift_id} self-pairs worker {worker1!r}"
+            )
+
+    # Check 3 — every shift endpoint must be a known worker.
+    for shift_id, worker1, worker2 in SHIFTS:
+        if worker1 not in WORKERS:
+            raise ValueError(
+                f"shift {shift_id} has unknown worker {worker1!r}"
+            )
+
+        if worker2 not in WORKERS:
+            raise ValueError(
+                f"shift {shift_id} has unknown worker {worker2!r}"
+            )
+
+    # Check 4 — every physical shift copy must have a unique shift ID.
+    seen_shift_ids = set()
+
+    for shift_id, _worker1, _worker2 in SHIFTS:
+        if shift_id in seen_shift_ids:
+            raise ValueError(f"duplicate shift ID {shift_id!r}")
+
+        seen_shift_ids.add(shift_id)
+
+    # Check 5 — every worker must have a positive integer skill value.
+    for worker in WORKERS:
+        if worker not in SKILL_VALUES:
+            raise ValueError(f"missing skill value for worker {worker!r}")
+
+        skill_value = SKILL_VALUES[worker]
+
+        if type(skill_value) is not int or skill_value <= 0:
+            raise ValueError(
+                f"skill({worker}) must be a positive integer, "
+                f"got {skill_value!r}"
+            )
+````
+
+Now restore/save this final version and run, in order:
+
+```bash
+python -c "from mock_instance import validate_instance; validate_instance(); print('mock instance valid')"
+python mock_instance.py
+ruff check mock_instance.py
+git status
+```
+
+If those results match the predictions, make the two commits:
+
+```bash
+git add mock_instance.py
+git commit -m "mock1: add validated crew-assignment instance"
+
+git add mock_notes_1.md
+git commit -m "mock1: document instance design and validation proofs"
+
+git status
+```
+
+Then we begin **`mock_primitives.py`**, and I’ll teach all three functions from their mathematical definitions before we write a line of executable code.
+
+==================================================================================================================================================================
+
