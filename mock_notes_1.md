@@ -25470,6 +25470,316 @@ Paste the pytest output next.
 
 ==============================================================================================================================================================
 
+The implementation itself is **clean**. ✅ You closed every engineering criterion we set:
+
+```text
+Mock-specific pytest      → 10/10 passed
+Full repository pytest    → 28/28 passed
+Scoped Ruff               → All checks passed
+Working tree              → clean
+Implementation commits    → separated from notes commits
+Search oracle             → Fraction(3, 1), {a,b,c}, ∅
+```
+
+And your visible Git history is beautifully structured:
+
+```text
+instance
+→ primitives
+→ admissibility
+→ evaluator
+→ search
+→ permanent tests
+```
+
+There is just **one protocol point we need to be precise about**: because we built this mock together with detailed assistance, this run cannot count as the originally specified **cold/no-AI mock** for purposes of gating the Exit Test. Technically, the software passed. Pedagogically, you learned the full build. But it did not measure what you can independently produce under exam conditions.
+
+## One Git check before we call this build archived
+
+Your `git log --oneline -12` stops at:
+
+```text
+550f0fb mock1: add validated crew-assignment instance
+```
+
+simply because you asked Git for only the latest 12 commits. We want to visually confirm that the oracle commit is immediately earlier in history, preserving:
+
+```text
+oracle
+↓
+implementation
+```
+
+Run:
+
+```bash
+git log --oneline -16
+```
+
+You should see the earlier commits including something like:
+
+```text
+mock1: document problem model and hand-analysis process
+mock1: lock hand-derived crew-assignment oracle
+```
+
+**below** the instance commit in the log, meaning they happened earlier.
+
+An even more targeted chronology check is:
+
+```bash
+git log --oneline --reverse -- MOCK_ORACLE.md mock_instance.py
+```
+
+The oracle commit should appear before the instance implementation commit.
+
+---
+
+## What you accomplished in this assisted mock
+
+You worked through the whole architecture from first principles:
+
+```text
+mathematical specification
+        ↓
+independent hand oracle
+        ↓
+representation design
+        ↓
+instance invariants
+        ↓
+mathematical primitives
+        ↓
+Boolean admissibility contract
+        ↓
+exact rational evaluator
+        ↓
+complete finite enumeration
+        ↓
+deterministic maximization
+        ↓
+guard-isolated regression suite
+```
+
+More importantly, the mock deliberately changed the old capstone mathematics and your resulting implementation preserved the changes:
+
+```text
+even parity                    ✓
+threshold >= 4                 ✓
+2*i(W) + |S|                  ✓
+denominator - 2                ✓
+no imported skill-degree rule  ✓
+```
+
+The permanent regression:
+
+```python
+assert candidate_value(
+    frozenset({"b"}),
+    frozenset({"s0", "s1", "s2"}),
+) == Fraction(3, 2)
+```
+
+is especially valuable because it will catch accidental reversion to the capstone numerator.
+
+## What should happen next
+
+Do **not** immediately start another large build.
+
+The useful next step is to convert what we just did together into something you can reproduce independently. Before the real Exit Test, I recommend a **short cold verification mock** with a new tiny specification—not another 2.5-hour project, but enough to test whether you can independently make the key decisions:
+
+```text
+representation
+validation contract
+primitive definitions
+admissibility guards
+exact vs approximate arithmetic
+power-set enumeration
+sentinel
+tie rule
+guard-isolated tests
+```
+
+I can write that verification prompt and then go completely silent while you do it. That would restore the original gate honestly.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Mock 1 Completion Record
+
+The guided Crew-Assignment Density mock is implementation-complete.
+
+### Final verification
+
+The permanent mock suite produced:
+
+```text
+10 collected
+10 passed
+````
+
+The scoped Ruff pass over:
+
+```text
+mock_instance.py
+mock_primitives.py
+mock_admissibility.py
+mock_evaluator.py
+mock_search.py
+test_mock.py
+```
+
+produced:
+
+```text
+All checks passed!
+```
+
+The complete foundation regression suite produced:
+
+```text
+28 passed
+```
+
+The final Git state was:
+
+```text
+nothing to commit, working tree clean
+```
+
+### Final implementation architecture
+
+```text
+MOCK_ORACLE.md
+    independently derived mathematical oracle
+            ↓
+mock_instance.py
+    fixed data
+    structural validation
+            ↓
+mock_primitives.py
+    skill_of(W)
+    internal_shift_count(W)
+    fringe(W)
+            ↓
+mock_admissibility.py
+    four-condition Boolean predicate
+            ↓
+mock_evaluator.py
+    exact Fraction objective
+            ↓
+mock_search.py
+    deterministic exhaustive enumeration
+            ↓
+test_mock.py
+    permanent regression suite
+```
+
+### Mathematical result reproduced
+
+The independently derived oracle was:
+
+```text
+W* = {a,b,c}
+S* = ∅
+value = 3
+```
+
+The implementation returned exactly:
+
+```python
+value = Fraction(3, 1)
+W = frozenset({"a", "b", "c"})
+S = frozenset()
+```
+
+### Search-space audit
+
+The fixed instance contains:
+
+```text
+15 nonempty crews
+89 structurally generated (W,S) pairs
+37 admissible pairs
+1 unique maximizing pair
+```
+
+### Specification-difference protections
+
+The mock deliberately differed from the F7 capstone.
+
+The implementation correctly used:
+
+```text
+parity:
+skill(W) + |S| is EVEN
+
+lower bound:
+skill(W) + |S| >= 4
+
+numerator:
+2*i(W) + |S|
+
+denominator:
+skill(W) + |S| - 2
+```
+
+It did not import the capstone's:
+
+```text
+odd parity
+threshold >= 3
+2*(internal + selected boundary)
+denominator - 1
+skill-versus-degree assumption
+```
+
+The permanent evaluator regression with nonempty S protects the new numerator:
+
+```python
+assert candidate_value(
+    frozenset({"b"}),
+    frozenset({"s0", "s1", "s2"}),
+) == Fraction(3, 2)
+```
+
+The incorrect capstone-shaped numerator would produce `3`, so this test detects pattern replay.
+
+### Important assessment distinction
+
+This build was completed with detailed AI guidance.
+
+Therefore it demonstrates:
+
+```text
+understanding developed through guided construction
+implementation correctness
+successful application of the architecture
+```
+
+but it does not constitute the originally specified cold/no-AI mock.
+
+A separate independent verification is required if the Exit Test gate is intended to measure unaided performance.
+
+> **RULE TO BANK:** A technically successful guided build and a successful cold assessment answer different questions. Preserve that distinction so the assessment gate measures what it claims to measure.
+
+````
+
+# OTHER FILE CHANGE
+
+**No implementation file changes are needed.**
+
+Your current mock code and tests are complete and clean.
+
+Run only the chronology check now:
+
+```bash
+git log --oneline -16
+````
+
+and paste it. I want to confirm the oracle commit visibly predates `550f0fb` before we formally close Mock 1.
 
 
 
