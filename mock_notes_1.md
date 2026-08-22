@@ -15577,6 +15577,3127 @@ Run the seven passing predictions plus the bad-query case now. Then paste the ou
 
 ==================================================================================================================================================================
 
+Nothing is wrong with the mathematics or with `fringe()`. All seven fringe predictions matched exactly, including the invalid-query guard. ✅
+
+The only thing Ruff found is a **formatting/style issue in the import block**:
+
+```text
+I001 Import block is un-sorted or un-formatted
+```
+
+That is auto-fixable and has no behavioral significance.
+
+## What Ruff is telling you
+
+This line is logically valid:
+
+```python
+from mock_instance import SHIFTS, SKILL_VALUES, WORKERS
+```
+
+Ruff's configured import sorter wants the import block rendered in its canonical form. Because this is an `I001 [*]`, Ruff explicitly marks it as a **safe mechanical fix**.
+
+This is exactly the kind of change for which we use:
+
+```bash
+ruff check mock_primitives.py --fix
+```
+
+rather than manually guessing how Ruff wants to format it.
+
+Remember the lesson from `gym.py`: the danger there came from running `--fix` over the **whole repository**. Here we are tightly scoping the command to exactly one file:
+
+```text
+mock_primitives.py
+```
+
+So this is the controlled version of the tooling workflow.
+
+---
+
+# Step 3D — Let Ruff Fix the Import
+
+Run:
+
+```bash
+ruff check mock_primitives.py --fix
+```
+
+### Prediction
+
+Something like:
+
+```text
+Found 1 error (1 fixed, 0 remaining).
+```
+
+The exact wording may vary slightly by Ruff version.
+
+Now immediately inspect again:
+
+```bash
+ruff check mock_primitives.py
+```
+
+### Prediction
+
+```text
+All checks passed!
+```
+
+Do **not** run:
+
+```bash
+ruff check . --fix
+```
+
+There is no reason to touch the rest of the repository.
+
+---
+
+# Step 3E — Re-Prove Behavior After Ruff Rewrites the File
+
+Even though this is only an import-formatting change, our engineering habit is:
+
+> If a tool rewrites a source file, re-run behavior afterward.
+
+First:
+
+```bash
+python mock_primitives.py
+```
+
+Prediction: **silent**.
+
+Then use one compact smoke test that exercises all three primitives on the oracle winner:
+
+```bash
+python -c 'from mock_primitives import skill_of, internal_shift_count, fringe; W=frozenset({"a","b","c"}); print(skill_of(W)); print(internal_shift_count(W)); print(fringe(W))'
+```
+
+Before running, predict:
+
+For:
+
+[
+W={a,b,c},
+]
+
+we hand-derived:
+
+[
+skill(W)=4,
+]
+
+[
+i(W)=3,
+]
+
+and:
+
+[
+\partial(W)={s3}.
+]
+
+Therefore expected output:
+
+```text
+4
+3
+['s3']
+```
+
+That is a particularly good smoke test because these are the exact three primitive quantities for the hand-derived winner.
+
+---
+
+# What We Have Now Proven
+
+The primitive layer has much stronger evidence behind it than merely "the file runs."
+
+### `skill_of(W)`
+
+We observed:
+
+```text
+skill({a,b,c}) = 4
+skill({b,d})   = 3
+skill(WORKERS) = 6
+skill(∅)       = 0
+```
+
+and:
+
+```text
+unknown worker → named ValueError
+```
+
+### `internal_shift_count(W)`
+
+We observed:
+
+```text
+i({a,b})       = 2
+i({a,b,c})     = 3
+i({b,c})       = 1
+i({a,c})       = 0
+i(WORKERS)     = 4
+i(∅)           = 0
+```
+
+and:
+
+```text
+unknown worker → named ValueError
+```
+
+### `fringe(W)`
+
+We observed:
+
+```text
+∂({a,b})       = ['s2']
+∂({b})         = ['s0', 's1', 's2']
+∂({a,c})       = ['s0', 's1', 's2', 's3']
+∂({a,b,c})     = ['s3']
+∂({b,c,d})     = ['s0', 's1']
+∂(WORKERS)     = []
+∂(∅)           = []
+```
+
+and:
+
+```text
+unknown worker → named ValueError
+```
+
+Every one matched the independently committed oracle.
+
+That is exactly what we wanted.
+
+---
+
+# Step 3F — Commit the Primitive Layer
+
+Once:
+
+```bash
+ruff check mock_primitives.py
+```
+
+says:
+
+```text
+All checks passed!
+```
+
+and the smoke test gives:
+
+```text
+4
+3
+['s3']
+```
+
+check Git:
+
+```bash
+git status
+```
+
+Then stage **only the implementation**:
+
+```bash
+git add mock_primitives.py
+```
+
+Check:
+
+```bash
+git status
+```
+
+Then commit:
+
+```bash
+git commit -m "mock1: add crew-assignment mathematical primitives"
+```
+
+Now commit your accumulated notes separately:
+
+```bash
+git add mock_notes_1.md
+git commit -m "mock1: document primitive design and oracle checks"
+```
+
+Finally:
+
+```bash
+git status
+```
+
+Prediction:
+
+```text
+nothing to commit, working tree clean
+```
+
+At that point, the first three software layers are established:
+
+```text
+MOCK_ORACLE.md
+    independent mathematical truth
+            ↓
+mock_instance.py
+    fixed data + structural validation
+            ↓
+mock_primitives.py
+    skill(W)
+    i(W)
+    ∂(W)
+```
+
+Next comes:
+
+```text
+mock_admissibility.py
+```
+
+and that is where the mock's deliberately changed conditions become critical:
+
+```text
+1. W nonempty and W ⊆ WORKERS
+2. S ⊆ ∂(W)
+3. skill(W) + |S| EVEN
+4. skill(W) + |S| >= 4
+```
+
+We will design each guard and, importantly, find a pair that isolates **Condition 4** without accidentally dying at Condition 3 first.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Step 3D — Primitive Layer Tooling and Closure
+
+All three mathematical primitives have now been exercised against values established independently in `MOCK_ORACLE.md`.
+
+### `skill_of(W)` observed results
+
+```text
+skill({a,b,c}) = 4
+skill({b,d})   = 3
+skill(WORKERS) = 6
+skill(∅)       = 0
+````
+
+An invalid query containing `"x"` raised:
+
+```text
+ValueError: W contains unknown worker 'x'
+```
+
+### `internal_shift_count(W)` observed results
+
+```text
+i({a,b})       = 2
+i({a,b,c})     = 3
+i({b,c})       = 1
+i({a,c})       = 0
+i(WORKERS)     = 4
+i(∅)           = 0
+```
+
+An invalid query containing `"x"` again raised the named contract violation.
+
+### `fringe(W)` observed results
+
+```text
+∂({a,b})       = ['s2']
+∂({b})         = ['s0', 's1', 's2']
+∂({a,c})       = ['s0', 's1', 's2', 's3']
+∂({a,b,c})     = ['s3']
+∂({b,c,d})     = ['s0', 's1']
+∂(WORKERS)     = []
+∂(∅)           = []
+```
+
+The invalid crew:
+
+```python
+frozenset({"c", "x"})
+```
+
+produced:
+
+```text
+ValueError: W contains unknown worker 'x'
+```
+
+Thus all three primitives agree with the independently derived oracle.
+
+---
+
+## Ruff I001 Finding
+
+Running:
+
+```bash
+ruff check mock_primitives.py
+```
+
+reported:
+
+```text
+I001 Import block is un-sorted or un-formatted
+```
+
+on the `mock_instance` import.
+
+This is a lint-formatting issue, not a mathematical or runtime error.
+
+The finding is marked:
+
+```text
+[*]
+```
+
+which means Ruff considers it safely auto-fixable.
+
+The correct response is the tightly scoped command:
+
+```bash
+ruff check mock_primitives.py --fix
+```
+
+followed by:
+
+```bash
+ruff check mock_primitives.py
+```
+
+The important scope distinction is:
+
+```text
+ruff check . --fix
+```
+
+means:
+
+> potentially rewrite fixable findings throughout the repository.
+
+while:
+
+```text
+ruff check mock_primitives.py --fix
+```
+
+means:
+
+> apply safe fixes only to this one source file.
+
+The earlier `gym.py` lesson therefore becomes a scope rule:
+
+> Use auto-fix where appropriate, but make the command's scope match the work being performed.
+
+---
+
+## Re-Test After Automated Rewrites
+
+Even a mechanical source-code rewrite should be followed by a behavioral check.
+
+For the oracle-winning crew:
+
+```text
+W = {a,b,c}
+```
+
+the independently derived primitive quantities are:
+
+[
+skill(W)=4,
+]
+
+[
+i(W)=3,
+]
+
+and
+
+[
+\partial(W)={s3}.
+]
+
+Therefore the post-Ruff smoke command is:
+
+```bash
+python -c 'from mock_primitives import skill_of, internal_shift_count, fringe; W=frozenset({"a","b","c"}); print(skill_of(W)); print(internal_shift_count(W)); print(fringe(W))'
+```
+
+Expected output:
+
+```text
+4
+3
+['s3']
+```
+
+Running:
+
+```bash
+python mock_primitives.py
+```
+
+should also remain silent because the module contains definitions rather than top-level demonstrations.
+
+---
+
+## Primitive Layer Complete
+
+The implementation architecture now has:
+
+```text
+MOCK_ORACLE.md
+    independent hand-derived truth
+            ↓
+mock_instance.py
+    fixed graph data
+    structural validation
+            ↓
+mock_primitives.py
+    skill_of(W)
+    internal_shift_count(W)
+    fringe(W)
+```
+
+The next layer is candidate admissibility.
+
+It must implement the mock's four conditions exactly as specified:
+
+```text
+1. W is nonempty and W ⊆ WORKERS
+2. S ⊆ ∂(W)
+3. skill(W) + |S| is EVEN
+4. skill(W) + |S| >= 4
+```
+
+These differ from the F7 capstone and therefore must be implemented from this specification rather than from memory.
+
+> **RULE TO BANK:** A lint finding and a logic failure are different categories of problem. First verify whether behavior is wrong. Here every mathematical prediction passed; Ruff found only a safely auto-fixable import-formatting issue. Scope the fix narrowly, then re-run behavior after the rewrite.
+
+````
+
+# COPY INTO `mock_primitives.py`
+
+**No manual code change is needed.**
+
+Let Ruff make the canonical import-formatting change:
+
+```bash
+ruff check mock_primitives.py --fix
+````
+
+Then verify:
+
+```bash
+ruff check mock_primitives.py
+```
+
+I do **not** want to guess at the exact import formatting your repository's Ruff configuration prefers when Ruff can apply it deterministically itself.
+
+After the fix, `mock_primitives.py` should contain the same three functions and identical runtime logic; only the import formatting should have changed.
+
+Run the Ruff fix and smoke test now. If they come back clean, make the two commits above, and then we move to `mock_admissibility.py`.
+
+==================================================================================================================================================================
+
+Excellent. The primitive layer is now fully closed:
+
+```text
+mock_primitives.py → Ruff clean ✓
+module silence     → confirmed ✓
+winner smoke test  → 4, 3, ['s3'] ✓
+implementation     → committed 7f65518 ✓
+notes              → committed e194221 ✓
+working tree       → clean ✓
+```
+
+Now we move up one architectural layer. This is where the mock starts deliberately trying to tempt you into replaying the old capstone conditions, so we are going to build it slowly and explicitly from the **new specification**.
+
+# Step 4 — `mock_admissibility.py`
+
+Create the file:
+
+```bash
+code mock_admissibility.py
+```
+
+Confirm:
+
+```bash
+ls mock_admissibility.py
+```
+
+Expected:
+
+```text
+mock_admissibility.py
+```
+
+Do not commit it yet.
+
+---
+
+# 1. What Is the Job of `is_admissible(W, S)`?
+
+We have already built functions that answer questions like:
+
+```text
+What is skill(W)?
+How many shifts are internal to W?
+Which shifts are on the fringe of W?
+```
+
+Now we need a different kind of function.
+
+`is_admissible(W, S)` asks:
+
+> Is this particular candidate pair `(W, S)` legally allowed to participate in the optimization?
+
+That makes it a **predicate**.
+
+A predicate is a function whose answer is Boolean:
+
+```text
+True
+False
+```
+
+So:
+
+```python
+is_admissible(W, S)
+```
+
+returns:
+
+```text
+True
+```
+
+if all four mathematical conditions hold, otherwise:
+
+```text
+False
+```
+
+---
+
+# 2. Why This Function Returns `False` Instead of Raising
+
+This is an important contract distinction.
+
+Recall `validate_instance()`:
+
+```text
+bad fixed graph
+→ raise ValueError
+```
+
+Why?
+
+Because if the stored graph itself is broken, nothing downstream can be trusted.
+
+But the exhaustive search is going to generate many candidate pairs deliberately.
+
+Most of them will be inadmissible.
+
+That is **normal search behavior**.
+
+The search should be able to do:
+
+```python
+if not is_admissible(W, S):
+    continue
+```
+
+So an inadmissible pair is not an exceptional program failure.
+
+It is just:
+
+```text
+candidate rejected
+→ False
+```
+
+This gives us:
+
+```text
+broken instance
+→ raise
+
+bad primitive query
+→ raise
+
+ordinary candidate that violates admissibility
+→ False
+```
+
+Those are three distinct contracts.
+
+---
+
+# 3. The Four Conditions — Read the Mock, Not the Capstone
+
+The mock requires, in exactly this order:
+
+### Condition 1
+
+[
+W\neq\varnothing
+]
+
+and
+
+[
+W\subseteq WORKERS.
+]
+
+### Condition 2
+
+[
+S\subseteq\partial(W).
+]
+
+### Condition 3
+
+[
+skill(W)+|S|
+]
+
+must be **even**.
+
+### Condition 4
+
+[
+skill(W)+|S|\ge4.
+]
+
+The dangerous pattern-replay errors would be:
+
+```text
+odd instead of even           ← WRONG
+>= 3 instead of >= 4          ← WRONG
+```
+
+So before any code, bank the mock version:
+
+```text
+NONEMPTY / SUBSET
+FRINGE SUBSET
+EVEN
+AT LEAST 4
+```
+
+---
+
+# 4. Condition 1 — `W` Must Be Nonempty and Valid
+
+Suppose:
+
+```python
+W = frozenset()
+```
+
+Then immediately:
+
+```text
+Condition 1 fails
+→ return False
+```
+
+Likewise:
+
+```python
+W = frozenset({"a", "x"})
+```
+
+fails because:
+
+```text
+"x" not in WORKERS
+```
+
+So we can canonicalize the supplied crew:
+
+```python
+W_set = frozenset(W)
+```
+
+and then check:
+
+```python
+if not W_set:
+    return False
+```
+
+followed by:
+
+```python
+if not W_set.issubset(WORKERS):
+    return False
+```
+
+Why convert to `frozenset`?
+
+Because mathematically (W) is a set.
+
+That gives us a stable internal representation regardless of whether the caller supplied:
+
+```python
+{"a", "b"}
+```
+
+or:
+
+```python
+["a", "b"]
+```
+
+The search itself will later generate `frozenset`s directly.
+
+---
+
+# 5. Condition 2 — `S` Must Be a Subset of the Fringe
+
+Suppose:
+
+[
+W={a,b,c}.
+]
+
+We already proved:
+
+[
+\partial(W)={s3}.
+]
+
+So these are legal with respect to Condition 2:
+
+```text
+S = ∅
+S = {s3}
+```
+
+but:
+
+```text
+S = {s0}
+```
+
+is not.
+
+Why?
+
+Because `s0` is internal to `{a,b,c}`, not fringe.
+
+So Condition 2 asks:
+
+> Is every selected shift ID actually present in `fringe(W)`?
+
+The clean subset operation is:
+
+```python
+S_set.issubset(fringe_set)
+```
+
+where:
+
+```python
+fringe_set = frozenset(fringe(W_set))
+```
+
+---
+
+# 6. Duplicate IDs in Supplied `S`
+
+This mock explicitly asks us to handle this **deliberately**.
+
+Mathematically, (S) is a set of physical shift copies.
+
+A physical copy can either be selected or not selected.
+
+You cannot select:
+
+```text
+s0 twice
+```
+
+and claim that gives two selected shifts.
+
+Parallel copies are represented instead by different identities:
+
+```text
+s0
+s1
+```
+
+So this is legitimate:
+
+```python
+frozenset({"s0", "s1"})
+```
+
+but a caller supplying:
+
+```python
+["s0", "s0"]
+```
+
+is not giving us a valid representation of a mathematical set.
+
+## Our contract decision
+
+We will **return `False`** for duplicate supplied IDs.
+
+Why not raise?
+
+Because this function's public contract is Boolean:
+
+```text
+candidate accepted
+→ True
+
+candidate rejected
+→ False
+```
+
+The search itself will generate real `frozenset`s, so duplicates cannot arise there anyway.
+
+This is defensive handling for an external caller.
+
+---
+
+# 7. Why We Must Detect Duplicates Before Converting to `frozenset`
+
+This would be wrong:
+
+```python
+S_set = frozenset(S)
+```
+
+followed by trying to detect duplicates.
+
+By then, duplicates are already gone.
+
+For example:
+
+```python
+frozenset(["s0", "s0", "s1"])
+```
+
+becomes:
+
+```python
+frozenset({"s0", "s1"})
+```
+
+The evidence that `"s0"` appeared twice has disappeared.
+
+So first:
+
+```python
+S_items = list(S)
+```
+
+Then compare:
+
+```python
+len(S_items)
+```
+
+with:
+
+```python
+len(set(S_items))
+```
+
+If they differ:
+
+```text
+the input contained duplicates
+```
+
+so:
+
+```python
+return False
+```
+
+Only after that do we construct:
+
+```python
+S_set = frozenset(S_items)
+```
+
+This illustrates a general lesson:
+
+> Validate information before transforming it in a way that destroys the evidence needed for validation.
+
+---
+
+# 8. Condition 3 — The Total Must Be EVEN
+
+Once Conditions 1 and 2 pass, compute:
+
+```python
+total = skill_of(W_set) + len(S_set)
+```
+
+Mathematically:
+
+[
+total=skill(W)+|S|.
+]
+
+The mock says it must be **even**.
+
+An integer is even precisely when:
+
+```python
+total % 2 == 0
+```
+
+So failure is:
+
+```python
+if total % 2 != 0:
+    return False
+```
+
+Notice the difference from the capstone.
+
+There you rejected:
+
+```text
+even
+```
+
+Here we reject:
+
+```text
+odd
+```
+
+That one-character logical reversal matters enormously.
+
+---
+
+# 9. Condition 4 — Total Must Be at Least 4
+
+Finally:
+
+```python
+if total < 4:
+    return False
+```
+
+If execution gets past that line, all four conditions passed.
+
+Then:
+
+```python
+return True
+```
+
+I want to preserve that explicit fourth guard rather than collapse it to:
+
+```python
+return total >= 4
+```
+
+because our code is deliberately mirroring four numbered mathematical conditions.
+
+Ruff may recognize the familiar `SIM103` pattern.
+
+We already know how to handle that deliberately:
+
+```python
+if total < 4:  # noqa: SIM103
+    return False
+```
+
+That annotation means:
+
+> Ruff has seen this simplification opportunity; we intentionally decline it because the explicit guard structure documents the mathematical definition.
+
+This is not blindly silencing the linter. It is a recorded design decision.
+
+---
+
+# 10. Guard Isolation — This Is Where Your Testing Lesson Pays Off
+
+Before running anything, we need one example for each condition.
+
+A good guard test must reach the guard it claims to test.
+
+So each candidate should pass all earlier conditions.
+
+---
+
+# Acceptance Case — The Oracle Winner
+
+Use:
+
+[
+W={a,b,c},
+\qquad
+S=\varnothing.
+]
+
+We know:
+
+### Condition 1
+
+```text
+W nonempty ✓
+W ⊆ WORKERS ✓
+```
+
+### Condition 2
+
+The empty set is a subset of every fringe:
+
+[
+\varnothing\subseteq{s3}.
+]
+
+Pass.
+
+### Condition 3
+
+[
+skill(W)+|S|
+============
+
+# 4+0
+
+4.
+
+]
+
+Four is even.
+
+Pass.
+
+### Condition 4
+
+[
+4\ge4.
+]
+
+Pass.
+
+Therefore:
+
+```python
+is_admissible(
+    frozenset({"a", "b", "c"}),
+    frozenset(),
+)
+```
+
+must return:
+
+```text
+True
+```
+
+---
+
+# Condition 1 Isolation — Empty Crew
+
+Use:
+
+```python
+W = frozenset()
+S = frozenset()
+```
+
+Immediately:
+
+```text
+W is empty
+→ Condition 1 fails
+```
+
+Prediction:
+
+```text
+False
+```
+
+Nothing later runs.
+
+---
+
+# Condition 2 Isolation — Internal Shift Pretending to Be Fringe
+
+Use:
+
+[
+W={a,b,c}.
+]
+
+We know:
+
+[
+\partial(W)={s3}.
+]
+
+Now supply:
+
+```python
+S = frozenset({"s0"})
+```
+
+`s0` exists, but it is internal to (W).
+
+So:
+
+```text
+Condition 1 → pass
+Condition 2 → fail
+```
+
+Prediction:
+
+```text
+False
+```
+
+This is better than using a nonexistent ID because it specifically tests:
+
+> a real graph shift that is not in the current crew's fringe.
+
+---
+
+# Condition 3 Isolation — Odd Total
+
+Use:
+
+[
+W={a,b,c},
+\qquad
+S={s3}.
+]
+
+Check:
+
+### Condition 1
+
+Valid crew.
+
+Pass.
+
+### Condition 2
+
+[
+s3\in\partial(W).
+]
+
+Pass.
+
+Now:
+
+[
+skill(W)=4
+]
+
+and:
+
+[
+|S|=1.
+]
+
+Therefore:
+
+[
+total=5.
+]
+
+Five is odd.
+
+Condition 3 fails.
+
+Importantly:
+
+[
+5\ge4.
+]
+
+So if execution somehow reached Condition 4, Condition 4 would pass.
+
+This cleanly isolates parity.
+
+Prediction:
+
+```text
+False
+```
+
+---
+
+# Condition 4 Isolation — This Is the Important One
+
+We need a pair satisfying:
+
+```text
+Condition 1 ✓
+Condition 2 ✓
+Condition 3 ✓
+Condition 4 ✗
+```
+
+To fail Condition 4:
+
+[
+skill(W)+|S|<4.
+]
+
+To pass Condition 3, that total must be even.
+
+For a nonempty crew with positive skill, the possible positive even total below 4 is:
+
+[
+2.
+]
+
+So we need:
+
+[
+skill(W)+|S|=2.
+]
+
+Choose:
+
+[
+W={a}.
+]
+
+Then:
+
+[
+skill(W)=1.
+]
+
+We know:
+
+[
+\partial({a})={s0,s1}.
+]
+
+Choose:
+
+[
+S={s0}.
+]
+
+Then:
+
+[
+|S|=1.
+]
+
+Total:
+
+[
+1+1=2.
+]
+
+Now trace:
+
+```text
+Condition 1:
+W={a} is nonempty and valid
+→ PASS
+
+Condition 2:
+s0 ∈ fringe({a})
+→ PASS
+
+Condition 3:
+1 + 1 = 2
+2 is even
+→ PASS
+
+Condition 4:
+2 >= 4 ?
+→ FAIL
+```
+
+So:
+
+```python
+is_admissible(
+    frozenset({"a"}),
+    frozenset({"s0"}),
+)
+```
+
+must return:
+
+```text
+False
+```
+
+This is the exact condition-4 isolation case the mock specification challenged us to find.
+
+---
+
+# 11. Duplicate-S Test
+
+We can also deliberately prove our extra contract decision.
+
+Use:
+
+```python
+W = frozenset({"b"})
+```
+
+and supply a **list**, not a frozenset:
+
+```python
+S = ["s0", "s0", "s1", "s2"]
+```
+
+The repeated `"s0"` means this is not a valid mathematical-set representation.
+
+Our duplicate check should reject immediately:
+
+```text
+False
+```
+
+This test is not one of the four mathematical admissibility conditions; it is a representation guard protecting the supplied `S`.
+
+---
+
+# 12. Predictions Before Running
+
+After creating the file, run these.
+
+### Valid winner
+
+```bash
+python -c 'from mock_admissibility import is_admissible; print(is_admissible(frozenset({"a","b","c"}), frozenset()))'
+```
+
+Expected:
+
+```text
+True
+```
+
+### Condition 1
+
+```bash
+python -c 'from mock_admissibility import is_admissible; print(is_admissible(frozenset(), frozenset()))'
+```
+
+Expected:
+
+```text
+False
+```
+
+### Condition 2
+
+```bash
+python -c 'from mock_admissibility import is_admissible; print(is_admissible(frozenset({"a","b","c"}), frozenset({"s0"})))'
+```
+
+Expected:
+
+```text
+False
+```
+
+### Condition 3
+
+```bash
+python -c 'from mock_admissibility import is_admissible; print(is_admissible(frozenset({"a","b","c"}), frozenset({"s3"})))'
+```
+
+Expected:
+
+```text
+False
+```
+
+### Condition 4
+
+```bash
+python -c 'from mock_admissibility import is_admissible; print(is_admissible(frozenset({"a"}), frozenset({"s0"})))'
+```
+
+Expected:
+
+```text
+False
+```
+
+### Duplicate supplied ID
+
+```bash
+python -c 'from mock_admissibility import is_admissible; print(is_admissible(frozenset({"b"}), ["s0","s0","s1","s2"]))'
+```
+
+Expected:
+
+```text
+False
+```
+
+So the complete predicted output sequence is:
+
+```text
+True
+False
+False
+False
+False
+False
+```
+
+Do not commit yet. After these pass, we will add one more diagnostic involving the actual oracle singleton `{b}` to prove that the mock's **even** parity is really being followed rather than the old capstone's odd rule.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Step 4 — Candidate Admissibility
+
+The next implementation layer is:
+
+```text
+mock_admissibility.py
+````
+
+Its job is to decide whether a candidate pair:
+
+```text
+(W, S)
+```
+
+is allowed to participate in the Crew-Assignment Density optimization.
+
+This function is a predicate:
+
+```python
+is_admissible(W, S)
+```
+
+and returns only:
+
+```text
+True
+False
+```
+
+---
+
+### Raise Versus False
+
+This layer has a different contract from instance validation.
+
+```text
+invalid fixed instance
+→ validate_instance() raises ValueError
+
+invalid primitive query
+→ primitive raises ValueError
+
+ordinary candidate that fails admissibility
+→ is_admissible() returns False
+```
+
+The exhaustive search is expected to generate many inadmissible candidates.
+
+An inadmissible candidate is therefore normal search behavior, not an exceptional program failure.
+
+---
+
+## The Four Mock Conditions
+
+The conditions must be implemented in this exact order.
+
+### Condition 1
+
+[
+W\neq\varnothing
+]
+
+and
+
+[
+W\subseteq WORKERS.
+]
+
+### Condition 2
+
+[
+S\subseteq\partial(W).
+]
+
+### Condition 3
+
+[
+skill(W)+|S|
+]
+
+is **even**.
+
+### Condition 4
+
+[
+skill(W)+|S|\ge4.
+]
+
+These are deliberately different from the F7 capstone.
+
+The mock requires:
+
+```text
+EVEN
+>= 4
+```
+
+not:
+
+```text
+ODD
+>= 3
+```
+
+The implementation must follow the current specification rather than replaying the prior checker.
+
+---
+
+## Canonical Crew Representation
+
+The supplied crew is converted to:
+
+```python
+W_set = frozenset(W)
+```
+
+because (W) is mathematically a set.
+
+Condition 1 then checks:
+
+```python
+if not W_set:
+    return False
+```
+
+and:
+
+```python
+if not W_set.issubset(WORKERS):
+    return False
+```
+
+An empty crew or a crew containing an unknown worker is therefore an ordinary negative admissibility result.
+
+---
+
+## Handling Duplicate Shift IDs in S
+
+The specification explicitly requires duplicate supplied IDs to be handled deliberately.
+
+Mathematically:
+
+```text
+S = set of physical shift copies
+```
+
+so a single physical ID cannot be selected twice.
+
+Parallel copies are instead represented by distinct IDs:
+
+```text
+s0
+s1
+```
+
+The chosen contract is:
+
+```text
+duplicate supplied shift ID
+→ return False
+```
+
+because `is_admissible()` is a Boolean predicate.
+
+The search itself will later generate `frozenset`s, so duplicate IDs cannot arise in its internally generated candidates. This handling protects external calls.
+
+---
+
+### Why Duplicates Must Be Checked Before Conversion
+
+If the function immediately performed:
+
+```python
+S_set = frozenset(S)
+```
+
+then:
+
+```python
+["s0", "s0", "s1"]
+```
+
+would become:
+
+```python
+frozenset({"s0", "s1"})
+```
+
+and the duplicate evidence would disappear.
+
+Therefore:
+
+```python
+S_items = list(S)
+```
+
+is created first.
+
+Then compare:
+
+```python
+len(S_items)
+```
+
+with:
+
+```python
+len(set(S_items))
+```
+
+If the lengths differ, the supplied collection contained a repeated ID and the function returns `False`.
+
+Only after that validation is `S` converted to a `frozenset`.
+
+The broader principle is:
+
+> Validate information before applying a transformation that destroys the evidence needed to validate it.
+
+---
+
+## Condition 2 — Fringe Subset
+
+The primitive:
+
+```python
+fringe(W_set)
+```
+
+returns a stable list of physical shift IDs.
+
+For subset testing, it is converted to:
+
+```python
+fringe_set = frozenset(fringe(W_set))
+```
+
+Then Condition 2 is:
+
+```python
+S_set.issubset(fringe_set)
+```
+
+If any selected shift ID does not lie on the crew's fringe, the candidate returns `False`.
+
+---
+
+## Conditions 3 and 4 Share One Quantity
+
+After Conditions 1 and 2 pass, compute:
+
+```python
+total = skill_of(W_set) + len(S_set)
+```
+
+This is:
+
+[
+skill(W)+|S|.
+]
+
+Condition 3 requires even parity:
+
+```python
+if total % 2 != 0:
+    return False
+```
+
+Condition 4 requires:
+
+```python
+if total < 4:
+    return False
+```
+
+If all four mathematical guards pass:
+
+```python
+return True
+```
+
+---
+
+## Deliberate SIM103 Override
+
+The final two lines have the pattern:
+
+```python
+if total < 4:
+    return False
+
+return True
+```
+
+Ruff may suggest simplifying this to:
+
+```python
+return total >= 4
+```
+
+The explicit guard is deliberately retained because the code mirrors four numbered mathematical admissibility conditions.
+
+Therefore the fourth guard carries:
+
+```python
+# noqa: SIM103
+```
+
+This records:
+
+> The linter saw the simplification; the explicit mathematical guard is intentionally preserved.
+
+A linter is advisory. A deliberate local override documents intent.
+
+---
+
+## Guard-Isolation Principle
+
+A test for condition (k) must use a candidate that passes every earlier condition.
+
+Otherwise an earlier return can make the test appear green without the intended guard ever executing.
+
+The mock's guard-isolation cases are:
+
+### Acceptance — winner
+
+```text
+W = {a,b,c}
+S = ∅
+```
+
+Then:
+
+```text
+Condition 1 → pass
+Condition 2 → pass
+skill(W)+|S| = 4
+Condition 3 → even → pass
+Condition 4 → 4 >= 4 → pass
+```
+
+Expected:
+
+```text
+True
+```
+
+---
+
+### Condition 1 isolation
+
+```text
+W = ∅
+S = ∅
+```
+
+The empty crew fails immediately.
+
+Expected:
+
+```text
+False
+```
+
+---
+
+### Condition 2 isolation
+
+```text
+W = {a,b,c}
+S = {s0}
+```
+
+For this crew:
+
+```text
+fringe(W) = {s3}
+```
+
+`s0` exists in the graph but is internal to the crew rather than fringe.
+
+Thus:
+
+```text
+Condition 1 → pass
+Condition 2 → fail
+```
+
+Expected:
+
+```text
+False
+```
+
+---
+
+### Condition 3 isolation
+
+```text
+W = {a,b,c}
+S = {s3}
+```
+
+Here:
+
+```text
+Condition 1 → pass
+Condition 2 → pass
+skill(W) = 4
+|S| = 1
+total = 5
+```
+
+Five is odd, so Condition 3 fails.
+
+Importantly:
+
+```text
+5 >= 4
+```
+
+so the lower-bound guard would have passed.
+
+This isolates parity cleanly.
+
+Expected:
+
+```text
+False
+```
+
+---
+
+### Condition 4 isolation
+
+Use:
+
+```text
+W = {a}
+S = {s0}
+```
+
+From the oracle:
+
+```text
+skill({a}) = 1
+fringe({a}) = {s0,s1}
+```
+
+Therefore:
+
+```text
+Condition 1:
+{a} is nonempty and valid
+→ pass
+
+Condition 2:
+{s0} ⊆ {s0,s1}
+→ pass
+
+Condition 3:
+skill(W)+|S|
+= 1 + 1
+= 2
+2 is even
+→ pass
+
+Condition 4:
+2 >= 4
+→ fail
+```
+
+This is the required condition-4-only rejection.
+
+The total cannot be a smaller positive even value because:
+
+```text
+nonempty W + positive worker skills
+→ skill(W) >= 1
+```
+
+and the only nonnegative even integer below 4 reachable here for an isolated lower-bound failure is `2`.
+
+Expected:
+
+```text
+False
+```
+
+---
+
+### Duplicate-S representation guard
+
+For example:
+
+```python
+W = frozenset({"b"})
+S = ["s0", "s0", "s1", "s2"]
+```
+
+contains the physical ID `"s0"` twice.
+
+The predicate deliberately rejects this malformed set representation.
+
+Expected:
+
+```text
+False
+```
+
+---
+
+## Predicted Interactive Results
+
+The six planned calls should produce, in order:
+
+```text
+True
+False
+False
+False
+False
+False
+```
+
+> **RULE TO BANK:** Admissibility is a sequence of mathematical guards. Preserve their specified order, isolate each guard in testing, and never import parity or threshold conditions from a previous problem merely because the architecture looks familiar.
+
+````
+
+# COPY INTO `mock_admissibility.py`
+
+```python
+# ==================================================================================================
+# MOCK EXIT 1 — CANDIDATE ADMISSIBILITY
+# ==================================================================================================
+#
+# PURPOSE:
+#
+# Decide whether a candidate pair:
+#
+#     (W, S)
+#
+# is admissible for the Crew-Assignment Density optimization problem.
+#
+#
+# A candidate consists of:
+#
+#     W
+#         a crew of workers
+#
+#     S
+#         a collection of physical shift IDs
+#
+#
+# PREDICATE CONTRACT:
+#
+# This function returns:
+#
+#     True
+#
+# when every admissibility condition holds, and:
+#
+#     False
+#
+# otherwise.
+#
+# An inadmissible candidate is normal search behavior.
+#
+# Therefore:
+#
+#     inadmissible candidate -> False
+#
+# rather than:
+#
+#     inadmissible candidate -> raise exception
+#
+#
+# CONTRAST WITH OTHER LAYERS:
+#
+#     malformed fixed instance
+#         -> validate_instance() raises ValueError
+#
+#     invalid primitive query
+#         -> primitive raises ValueError
+#
+#     candidate failing admissibility
+#         -> is_admissible() returns False
+#
+#
+# ==================================================================================================
+
+
+from mock_instance import WORKERS
+from mock_primitives import fringe, skill_of
+
+
+# ==================================================================================================
+# is_admissible(W, S)
+# ==================================================================================================
+#
+# MATHEMATICAL CONDITIONS — LOCKED ORDER:
+#
+# CONDITION 1:
+#
+#     W is nonempty
+#
+# and:
+#
+#     W subseteq WORKERS
+#
+#
+# CONDITION 2:
+#
+#     S subseteq fringe(W)
+#
+#
+# CONDITION 3:
+#
+#     skill(W) + |S|
+#
+# is EVEN.
+#
+#
+# CONDITION 4:
+#
+#     skill(W) + |S| >= 4
+#
+#
+# IMPORTANT:
+#
+# These are NOT the F7 capstone conditions.
+#
+# This mock uses:
+#
+#     EVEN parity
+#     lower bound 4
+#
+# Do not pattern-replay:
+#
+#     odd
+#     lower bound 3
+#
+#
+# ==================================================================================================
+# REPRESENTATION DECISIONS
+# ==================================================================================================
+#
+# W:
+#
+#     converted to frozenset
+#
+# because W is mathematically a set of workers.
+#
+#
+# S:
+#
+#     mathematically a set of physical shift IDs.
+#
+# The search will later generate S as frozenset values.
+#
+# However, this predicate deliberately handles callers that supply a
+# more general collection.
+#
+#
+# DUPLICATE-ID CONTRACT:
+#
+# A physical shift ID cannot occur twice in mathematical S.
+#
+# For example:
+#
+#     ["s0", "s0"]
+#
+# is rejected.
+#
+# Parallel copies instead have different IDs:
+#
+#     "s0"
+#     "s1"
+#
+# and may both be selected.
+#
+#
+# DUPLICATES MUST BE CHECKED BEFORE SET CONVERSION:
+#
+# If we immediately wrote:
+#
+#     frozenset(["s0", "s0", "s1"])
+#
+# the result would be:
+#
+#     frozenset({"s0", "s1"})
+#
+# and evidence of the duplicate would be destroyed.
+#
+# Therefore:
+#
+#     S_items = list(S)
+#
+# is created first.
+#
+# Then:
+#
+#     len(S_items)
+#
+# is compared with:
+#
+#     len(set(S_items))
+#
+# A difference means the supplied collection contained a repeated ID.
+#
+#
+# ==================================================================================================
+# COMMENTS-FIRST ALGORITHM
+# ==================================================================================================
+#
+# 1. Convert W to a frozenset:
+#
+#        W_set = frozenset(W)
+#
+#
+# 2. CONDITION 1:
+#
+#        require W_set to be nonempty
+#
+#        require W_set subseteq WORKERS
+#
+#    otherwise:
+#
+#        return False
+#
+#
+# 3. Preserve the supplied S items long enough to detect duplicates:
+#
+#        S_items = list(S)
+#
+#
+# 4. If the same shift ID occurs more than once:
+#
+#        return False
+#
+#
+# 5. Convert the duplicate-free supplied S to:
+#
+#        S_set = frozenset(S_items)
+#
+#
+# 6. CONDITION 2:
+#
+#        compute fringe(W_set)
+#
+#        convert that fringe list to a frozenset
+#
+#        require:
+#
+#            S_set subseteq fringe_set
+#
+#    otherwise:
+#
+#        return False
+#
+#
+# 7. Compute:
+#
+#        total = skill_of(W_set) + len(S_set)
+#
+#
+# 8. CONDITION 3:
+#
+#        require total to be EVEN
+#
+#    If total is odd:
+#
+#        return False
+#
+#
+# 9. CONDITION 4:
+#
+#        require total >= 4
+#
+#    otherwise:
+#
+#        return False
+#
+#
+# 10. If every guard passed:
+#
+#        return True
+#
+#
+# ==================================================================================================
+# HAND-DERIVED PREDICTIONS
+# ==================================================================================================
+#
+# ACCEPTANCE:
+#
+#     W = {"a", "b", "c"}
+#     S = empty
+#
+#     skill(W) = 4
+#     |S| = 0
+#     total = 4
+#
+#     all four conditions pass
+#
+#     expected -> True
+#
+#
+# CONDITION 1 REJECTION:
+#
+#     W = empty
+#     S = empty
+#
+#     expected -> False
+#
+#
+# CONDITION 2 REJECTION:
+#
+#     W = {"a", "b", "c"}
+#     S = {"s0"}
+#
+#     fringe(W) = {"s3"}
+#
+#     s0 is an existing shift but is internal rather than fringe
+#
+#     expected -> False
+#
+#
+# CONDITION 3 REJECTION:
+#
+#     W = {"a", "b", "c"}
+#     S = {"s3"}
+#
+#     S is a valid fringe subset
+#
+#     skill(W) + |S|
+#         = 4 + 1
+#         = 5
+#
+#     5 is odd
+#
+#     expected -> False
+#
+#
+# CONDITION 4 REJECTION:
+#
+#     W = {"a"}
+#     S = {"s0"}
+#
+#     fringe({"a"}) = {"s0", "s1"}
+#
+#     so Conditions 1 and 2 pass.
+#
+#     skill(W) + |S|
+#         = 1 + 1
+#         = 2
+#
+#     2 is even, so Condition 3 passes.
+#
+#     But:
+#
+#         2 < 4
+#
+#     so Condition 4 alone rejects.
+#
+#     expected -> False
+#
+#
+# DUPLICATE-S REJECTION:
+#
+#     W = {"b"}
+#
+#     S supplied as:
+#
+#         ["s0", "s0", "s1", "s2"]
+#
+#     repeated "s0" violates the supplied-S representation contract
+#
+#     expected -> False
+#
+# ==================================================================================================
+
+
+def is_admissible(W, S):
+    # Canonical mathematical representation of the crew.
+    W_set = frozenset(W)
+
+    # Condition 1 — W must be nonempty and contained in WORKERS.
+    if not W_set:
+        return False
+
+    if not W_set.issubset(WORKERS):
+        return False
+
+    # S is mathematically a set of physical shift IDs.
+    #
+    # Preserve the supplied collection long enough to detect repeated IDs
+    # before converting it to a frozenset.
+    S_items = list(S)
+
+    if len(S_items) != len(set(S_items)):
+        return False
+
+    S_set = frozenset(S_items)
+
+    # Condition 2 — every selected shift must lie on the fringe of W.
+    fringe_set = frozenset(fringe(W_set))
+
+    if not S_set.issubset(fringe_set):
+        return False
+
+    # Conditions 3 and 4 use the same total.
+    total = skill_of(W_set) + len(S_set)
+
+    # Condition 3 — skill(W) + |S| must be EVEN.
+    if total % 2 != 0:
+        return False
+
+    # Condition 4 — skill(W) + |S| must be at least 4.
+    #
+    # The explicit fourth guard deliberately mirrors the numbered
+    # mathematical definition, so SIM103 is locally declined.
+    if total < 4:  # noqa: SIM103
+        return False
+
+    # All four mathematical admissibility conditions hold.
+    return True
+````
+
+Run the six predictions now. If all six match, paste the output and we’ll do the extra parity sanity check, Ruff, module-silence check, and the `mock1:` admissibility commit.
+=========================================================================================================================================================
+
+Excellent. All six admissibility predictions matched exactly. ✅ That means each of the four mathematical guards is behaving as designed, and the duplicate-`S` representation guard is also working.
+
+Before we commit this layer, I want to do **one especially important sanity check**: prove that the code is following this mock’s **even-parity rule**, not accidentally reproducing the old capstone’s odd-parity rule.
+
+# Step 4B — Parity Sanity Check
+
+Use the singleton crew:
+
+[
+W={b}.
+]
+
+From the oracle, we already know:
+
+[
+skill({b})=1
+]
+
+and:
+
+[
+\partial({b})={s0,s1,s2}.
+]
+
+Take the entire fringe:
+
+[
+S={s0,s1,s2}.
+]
+
+Now walk through all four conditions.
+
+### Condition 1
+
+[
+W={b}
+]
+
+is nonempty and valid.
+
+Pass.
+
+### Condition 2
+
+[
+S={s0,s1,s2}
+]
+
+is exactly the fringe of `{b}`.
+
+Pass.
+
+### Condition 3
+
+[
+skill(W)+|S|
+============
+
+# 1+3
+
+4.
+
+]
+
+Four is **even**.
+
+Pass.
+
+### Condition 4
+
+[
+4\ge4.
+]
+
+Pass.
+
+Therefore:
+
+```python
+is_admissible(
+    frozenset({"b"}),
+    frozenset({"s0", "s1", "s2"}),
+)
+```
+
+must return:
+
+```text
+True
+```
+
+This is a very useful diagnostic because under the **old capstone rule**, where the total had to be odd, this candidate would be rejected.
+
+So if we get `True`, we have direct evidence that we did not accidentally pattern-replay the old parity condition.
+
+Run:
+
+```bash
+python -c 'from mock_admissibility import is_admissible; print(is_admissible(frozenset({"b"}), frozenset({"s0","s1","s2"})))'
+```
+
+### Prediction
+
+```text
+True
+```
+
+---
+
+# Step 4C — One More Condition-1 Sanity Check
+
+Condition 1 does two jobs:
+
+```text
+W nonempty
+AND
+W ⊆ WORKERS
+```
+
+We already tested the empty case.
+
+Now test the subset half:
+
+```bash
+python -c 'from mock_admissibility import is_admissible; print(is_admissible(frozenset({"a","x"}), frozenset()))'
+```
+
+Prediction:
+
+```text
+False
+```
+
+Notice something architecturally nice here: the function should return `False` **before** calling `fringe()` or `skill_of()`.
+
+If it failed to do that, those primitives would raise:
+
+```text
+ValueError: W contains unknown worker 'x'
+```
+
+But `is_admissible()` owns the candidate-level contract, so an invalid candidate crew should simply be rejected as:
+
+```text
+False
+```
+
+That tells us the guard order is doing real work.
+
+---
+
+# Step 4D — Confirm Module Silence
+
+Run:
+
+```bash
+python mock_admissibility.py
+```
+
+Prediction:
+
+```text
+no output
+```
+
+Again, this is an importable module containing function definitions, not a demo script.
+
+---
+
+# Step 4E — Ruff Check
+
+Run:
+
+```bash
+ruff check mock_admissibility.py
+```
+
+### Prediction
+
+Ideally:
+
+```text
+All checks passed!
+```
+
+Our explicit:
+
+```python
+if total < 4:  # noqa: SIM103
+```
+
+should prevent Ruff from complaining about the deliberate four-guard structure.
+
+If Ruff reports anything else, paste it before changing code.
+
+---
+
+# Step 4F — Commit the Admissibility Layer
+
+Once you have:
+
+```text
+parity sanity check → True
+unknown-worker candidate → False
+module direct run → silent
+Ruff → clean
+```
+
+run:
+
+```bash
+git status
+```
+
+Then stage only the implementation:
+
+```bash
+git add mock_admissibility.py
+```
+
+Check:
+
+```bash
+git status
+```
+
+Then commit:
+
+```bash
+git commit -m "mock1: add crew-assignment admissibility predicate"
+```
+
+Now commit your accumulated notes separately:
+
+```bash
+git add mock_notes_1.md
+git commit -m "mock1: document admissibility guards and isolation tests"
+```
+
+Finally:
+
+```bash
+git status
+```
+
+Expected:
+
+```text
+nothing to commit, working tree clean
+```
+
+At that point our architecture is:
+
+```text
+MOCK_ORACLE.md
+    independently derived answer
+            ↓
+mock_instance.py
+    fixed data + validation
+            ↓
+mock_primitives.py
+    skill(W), i(W), fringe(W)
+            ↓
+mock_admissibility.py
+    decides which (W,S) may compete
+```
+
+The next layer is the **exact evaluator**:
+
+```text
+mock_evaluator.py
+```
+
+and there we will encode the mock formula exactly:
+
+[
+\frac{2i(W)+|S|}
+{skill(W)+|S|-2},
+]
+
+using `Fraction`, with special attention to the fact that **only `i(W)` gets doubled**.
+
+---
+
+# COPY INTO `mock_notes_1.md`
+
+````markdown
+## Step 4B — Admissibility Interactive Proofs
+
+The first six interactive checks all matched their predictions.
+
+Observed sequence:
+
+```text
+winner accepted                    → True
+empty W rejected                   → False
+non-fringe shift rejected          → False
+odd total rejected                 → False
+total below 4 rejected             → False
+duplicate supplied shift ID        → False
+````
+
+This confirms that the predicate is implementing the intended guard sequence.
+
+---
+
+### Acceptance Case
+
+The oracle winner is:
+
+```text
+W = {a,b,c}
+S = ∅
+```
+
+For this pair:
+
+```text
+Condition 1:
+W is nonempty and W ⊆ WORKERS
+→ pass
+
+Condition 2:
+∅ is a subset of fringe(W)
+→ pass
+
+skill(W) = 4
+|S| = 0
+total = 4
+
+Condition 3:
+4 is even
+→ pass
+
+Condition 4:
+4 >= 4
+→ pass
+```
+
+Observed result:
+
+```text
+True
+```
+
+---
+
+### Condition 1 — Empty Crew
+
+```text
+W = ∅
+S = ∅
+```
+
+The predicate rejects immediately.
+
+Observed:
+
+```text
+False
+```
+
+---
+
+### Condition 2 — Existing but Non-Fringe Shift
+
+```text
+W = {a,b,c}
+S = {s0}
+```
+
+For this crew:
+
+```text
+fringe(W) = {s3}
+```
+
+`s0` is a real shift, but it is internal rather than fringe.
+
+Therefore:
+
+```text
+Condition 1 → pass
+Condition 2 → fail
+```
+
+Observed:
+
+```text
+False
+```
+
+This is a stronger Condition-2 test than using a nonexistent ID because it proves the predicate distinguishes internal physical shifts from fringe physical shifts.
+
+---
+
+### Condition 3 — Odd Total
+
+```text
+W = {a,b,c}
+S = {s3}
+```
+
+Here:
+
+```text
+Condition 1 → pass
+Condition 2 → pass
+```
+
+and:
+
+```text
+skill(W) = 4
+|S| = 1
+total = 5
+```
+
+Five is odd.
+
+Therefore Condition 3 rejects.
+
+Since:
+
+```text
+5 >= 4
+```
+
+Condition 4 would have passed.
+
+This cleanly isolates parity.
+
+Observed:
+
+```text
+False
+```
+
+---
+
+### Condition 4 — Lower Bound Isolation
+
+The isolated Condition-4 pair is:
+
+```text
+W = {a}
+S = {s0}
+```
+
+From the oracle:
+
+```text
+skill({a}) = 1
+fringe({a}) = {s0,s1}
+```
+
+Thus:
+
+```text
+Condition 1:
+{a} is nonempty and valid
+→ pass
+
+Condition 2:
+{s0} ⊆ {s0,s1}
+→ pass
+
+Condition 3:
+1 + 1 = 2
+2 is even
+→ pass
+
+Condition 4:
+2 >= 4
+→ fail
+```
+
+Observed:
+
+```text
+False
+```
+
+This proves the fourth guard itself is reachable and functioning.
+
+The test does not merely produce an inadmissible candidate; it constructs a candidate that survives every earlier guard before failing the intended one.
+
+---
+
+### Duplicate-S Representation Guard
+
+The supplied collection:
+
+```python
+["s0", "s0", "s1", "s2"]
+```
+
+contains the physical ID `"s0"` twice.
+
+The predicate detects the duplicate before converting the collection to a `frozenset`.
+
+Observed:
+
+```text
+False
+```
+
+This confirms that duplicate evidence is not silently erased by set conversion.
+
+---
+
+## Even-Parity Sanity Check
+
+A particularly important diagnostic is:
+
+```text
+W = {b}
+S = {s0,s1,s2}
+```
+
+The hand-derived quantities are:
+
+```text
+skill({b}) = 1
+|S| = 3
+```
+
+so:
+
+```text
+total = 1 + 3 = 4
+```
+
+Conditions:
+
+```text
+W valid                     → pass
+S equals fringe({b})        → pass
+4 is even                   → pass
+4 >= 4                      → pass
+```
+
+Therefore the predicted result is:
+
+```text
+True
+```
+
+This case is useful because the F7 capstone required odd parity.
+
+Under the old rule, total `4` would have been rejected.
+
+Under the current mock specification, it must be accepted.
+
+Thus this call directly tests that the implementation follows the new specification rather than replaying old mathematics.
+
+Command:
+
+```bash
+python -c 'from mock_admissibility import is_admissible; print(is_admissible(frozenset({"b"}), frozenset({"s0","s1","s2"})))'
+```
+
+Expected:
+
+```text
+True
+```
+
+---
+
+## Condition 1 — Unknown Worker
+
+Condition 1 also requires:
+
+```text
+W ⊆ WORKERS
+```
+
+So:
+
+```text
+W = {a,x}
+S = ∅
+```
+
+should return:
+
+```text
+False
+```
+
+rather than allowing the invalid crew to reach `fringe()` or `skill_of()`.
+
+This demonstrates the importance of guard ordering.
+
+The primitive functions raise on invalid queries, but the higher-level admissibility predicate owns the candidate-level contract and rejects malformed candidate crews before invoking those primitives.
+
+Command:
+
+```bash
+python -c 'from mock_admissibility import is_admissible; print(is_admissible(frozenset({"a","x"}), frozenset()))'
+```
+
+Expected:
+
+```text
+False
+```
+
+---
+
+## Admissibility Layer Closure
+
+Before committing:
+
+```bash
+python mock_admissibility.py
+```
+
+should be silent.
+
+Then:
+
+```bash
+ruff check mock_admissibility.py
+```
+
+should pass.
+
+The explicit final guard remains:
+
+```python
+if total < 4:  # noqa: SIM103
+    return False
+
+return True
+```
+
+The local `noqa` records that the four-condition structure is intentionally preserved even though Ruff can express the final condition more compactly.
+
+The architecture now becomes:
+
+```text
+oracle
+    ↓
+validated instance
+    ↓
+mathematical primitives
+    ↓
+admissibility predicate
+```
+
+The next layer will evaluate only admissible candidates using exact rational arithmetic.
+
+> **RULE TO BANK:** When adapting a familiar architecture to a new specification, create diagnostic cases that would behave differently under the old rules. The `{b}` full-fringe candidate forces total `4`, so accepting it proves that the mock's even-parity rule—not the capstone's odd-parity rule—is actually implemented.
+
+````
+
+# COPY INTO `mock_admissibility.py`
+
+**No code change is needed at this step.**
+
+Keep the current complete file exactly as written.
+
+The next actions are execution and tooling checks only:
+
+```bash
+python -c 'from mock_admissibility import is_admissible; print(is_admissible(frozenset({"b"}), frozenset({"s0","s1","s2"})))'
+
+python -c 'from mock_admissibility import is_admissible; print(is_admissible(frozenset({"a","x"}), frozenset()))'
+
+python mock_admissibility.py
+
+ruff check mock_admissibility.py
+````
+
+Predictions:
+
+```text
+True
+False
+<silence>
+All checks passed!
+```
+
+Once those match, commit the implementation and notes with the commands above.
+
+=========================================================================================================================================================
+
+
 
 
 
