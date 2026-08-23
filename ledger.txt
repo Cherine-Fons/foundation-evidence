@@ -1,0 +1,8 @@
+t1,alice,buy,10,3
+t2,bob,sell,5,2
+t3,alice,sell,x,4
+t4,carol,buy,8
+t5,dana,buy,12,1
+t6,bob,buy,7,7
+t7,alice,buy,,2
+t8,carol,sell,9,3
