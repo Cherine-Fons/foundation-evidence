@@ -2,6 +2,10 @@
 
 Python implementations of graph algorithms, exact combinatorial optimization, deterministic search, and mathematical verification. The code emphasizes explicit problem specifications, exact arithmetic, input validation, and tests against hand-derived reference results.
 
+## Authorship
+
+I wrote every line of Python code in this repository. Every code commit is my own work, dated as it was written.
+
 ## Graph optimization and exact computation
 
 The [set-pair density checker](search.py) evaluates a combinatorial optimization problem on an explicitly represented multigraph. Its components separate graph data, admissibility, exact objective evaluation, and exhaustive search:
