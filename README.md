@@ -1,21 +1,52 @@
-# CPF Foundations and Ramp-Up
+# Python Algorithm Foundations
 
-This repository contains my work from a five-week Python foundation program, July 20–August 23, 2026, completed before starting the Certificate in Python for Finance (CPF) cohort.
+Python implementations of graph algorithms, exact combinatorial optimization, deterministic search, and mathematical verification. The code emphasizes explicit problem specifications, exact arithmetic, input validation, and tests against hand-derived reference results.
 
-## How I worked
+## Graph optimization and exact computation
 
-I completed daily exercises and committed them as I went, with weekly closed-book exit checks to test what I could write without referring back to the lessons. I followed a specification-first approach: state what the code should do, identify the inputs, outputs, and boundary cases, then write and check the implementation.
+The [set-pair density checker](search.py) evaluates a combinatorial optimization problem on an explicitly represented multigraph. Its components separate graph data, admissibility, exact objective evaluation, and exhaustive search:
 
-## What is in the repository
+| Component | Implementation |
+|---|---|
+| Multigraph instance and structural validation | [`instance.py`](instance.py) |
+| Vertex sums, internal edges, and boundary-edge calculations | [`primitives.py`](primitives.py) |
+| Candidate-pair admissibility | [`admissibility.py`](admissibility.py) |
+| Exact rational objective evaluation | [`evaluator.py`](evaluator.py) |
+| Deterministic exhaustive maximization | [`search.py`](search.py) |
+| Correctness and regression tests | [`test_checker.py`](test_checker.py) |
 
-The files are kept at the top level rather than organized into separate weekly folders.
+The checker distinguishes parallel edge copies, uses Python's `Fraction` for exact comparisons, and verifies results against independently derived small-instance expectations.
 
-- **Foundation exercises:** `gym.py` is my early practice module for functions, conditionals, calculations, and formatted output. The `day*.py` files record individual daily exercises.
-- **Topic exercises:** Smaller scripts cover finance calculations, data handling, and plotting, including `finance_utils.py`, `prices_series.py`, `filtering.py`, `grouping.py`, `plot_prices.py`, and `returns_hist.py`.
-- **Exit checks and tests:** `exit_check.py` through `exit_check4.py` contain the exit-check exercises. The `test_*.py` files contain tests for the exercises and larger projects.
-- **Graph and capstone work:** `read_edges.py`, `helpers.py`, and `analyze_graph.py` form a small graph-analysis workflow that reads and validates edge data, computes degrees, and checks capacity limits. The repository also contains more substantial specification-driven work in `multigraph.py`, `instance.py`, `admissibility.py`, `evaluator.py`, and `search.py`, together with the later ledger and mock-assessment modules.
-- **Notes and specifications:** `notes_day*.md` and `quiz_day*.md` (kept for most, not all, days), the weekly notes and review files, and the oracle documents record the lessons, questions, specifications, and assessment material. Supporting files include sample inputs and `requirements.txt`.
+## Graph processing
 
-## Authorship
+[`read_edges.py`](read_edges.py), [`helpers.py`](helpers.py), and [`analyze_graph.py`](analyze_graph.py) implement an edge-list processing pipeline. The modules validate input rows, compute vertex degrees, and identify capacity violations.
 
-Every code commit is my own work, dated as it was written.
+## Exact optimization over structured records
+
+The [ledger modules](ledger_search.py) implement a separate data-processing and optimization pipeline:
+
+- [`ledger_parser.py`](ledger_parser.py) and [`ledger_model.py`](ledger_model.py) — validated input and typed records.
+- [`ledger_eligibility.py`](ledger_eligibility.py) and [`ledger_evaluator.py`](ledger_evaluator.py) — feasibility rules and exact rational scoring.
+- [`ledger_search.py`](ledger_search.py) and [`ledger_report.py`](ledger_report.py) — deterministic subset search and results reporting.
+- [`test_exit.py`](test_exit.py) and [`EXIT_ORACLE.md`](EXIT_ORACLE.md) — regression tests and a hand-derived reference result.
+
+## Numerical and data utilities
+
+Additional Python modules cover return calculations, data manipulation, and numerical visualization, including [`finance_utils.py`](finance_utils.py), [`prices_series.py`](prices_series.py), and [`capstone_charts.py`](capstone_charts.py).
+
+## Running the code
+
+With Python 3 installed, install the dependencies and run the selected test suites:
+
+```bash
+python3 -m pip install -r requirements.txt
+python3 -m pytest -q test_checker.py test_exit.py
+```
+
+To run the graph-processing example:
+
+```bash
+python3 analyze_graph.py
+```
+
+The code and its tests are retained alongside the original Git commit history.
